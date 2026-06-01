@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/Bootstrap/">
+    <Project Path="src/Bootstrap/Promethix.CloudflareTunnelOperator.Hosting/Promethix.CloudflareTunnelOperator.Hosting.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/" />
+  <Folder Name="/src/Modules/Routing/">
+    <Project Path="src/Modules/Routing/Promethix.CloudflareTunnelOperator.Routing.Application/Promethix.CloudflareTunnelOperator.Routing.Application.csproj" />
+    <Project Path="src/Modules/Routing/Promethix.CloudflareTunnelOperator.Routing.Domain/Promethix.CloudflareTunnelOperator.Routing.Domain.csproj" />
+    <Project Path="src/Modules/Routing/Promethix.CloudflareTunnelOperator.Routing.Integrations.Cloudflare/Promethix.CloudflareTunnelOperator.Routing.Integrations.Cloudflare.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Promethix.CloudflareTunnelOperator.Routing.Tests/Promethix.CloudflareTunnelOperator.Routing.Tests.csproj" />
+  </Folder>
+</Solution>

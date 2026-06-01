@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: promethix-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: promethix-cloudflare-tunnel-operator
+  namespace: promethix-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: promethix-cloudflare-tunnel-operator
+  namespace: promethix-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: promethix-cloudflare-tunnel-operator
+  template:
+    metadata:
+      labels:
+        app: promethix-cloudflare-tunnel-operator
+    spec:
+      serviceAccountName: promethix-cloudflare-tunnel-operator
+      containers:
+        - name: operator
+          image: promethix/cloudflare-tunnel-operator:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: CloudflareTunnel__TunnelId
+              value: REPLACE_ME
+            - name: CloudflareTunnel__AccountId
+              value: REPLACE_ME
+            - name: CloudflareTunnel__ApiToken
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflare-api
+                  key: api-token
+            - name: RoutingOperator__OwnershipTag
+              value: promethix-cloudflare-tunnel-operator
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http

@@ -1,0 +1,11 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Promethix.CloudflareTunnelOperator.Routing.Domain\Promethix.CloudflareTunnelOperator.Routing.Domain.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <AssemblyName>Promethix.CloudflareTunnelOperator.Routing.Application</AssemblyName>
+  </PropertyGroup>
+
+</Project>

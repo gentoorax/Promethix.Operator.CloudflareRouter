@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Modules\Routing\Promethix.CloudflareTunnelOperator.Routing.Application\Promethix.CloudflareTunnelOperator.Routing.Application.csproj" />
+    <ProjectReference Include="..\..\Modules\Routing\Promethix.CloudflareTunnelOperator.Routing.Integrations.Cloudflare\Promethix.CloudflareTunnelOperator.Routing.Integrations.Cloudflare.csproj" />
+    <ProjectReference Include="..\..\Modules\Routing\Promethix.CloudflareTunnelOperator.Routing.Domain\Promethix.CloudflareTunnelOperator.Routing.Domain.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <AssemblyName>Promethix.CloudflareTunnelOperator.Hosting</AssemblyName>
+    <NoWarn>$(NoWarn);CA1812</NoWarn>
+  </PropertyGroup>
+
+</Project>
