@@ -9,4 +9,6 @@ public sealed class CloudflareTunnelOptions
     public string TunnelId { get; set; } = string.Empty;
 
     public string ApiToken { get; set; } = string.Empty;
+
+    public string OwnershipTag { get; set; } = "promethix-cloudflare-tunnel-operator";
 }

@@ -6,3 +6,6 @@ rules:
   - apiGroups: ["edge.promethix.net"]
     resources: ["tunnelpublichostnames", "tunnelpublichostnames/status", "tunnelpublichostnames/finalizers"]
     verbs: ["get", "list", "watch", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "create", "update", "patch"]

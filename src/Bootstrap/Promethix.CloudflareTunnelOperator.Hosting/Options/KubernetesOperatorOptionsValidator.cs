@@ -21,6 +21,16 @@ internal sealed class KubernetesOperatorOptionsValidator : IValidateOptions<Kube
             failures.Add("KubernetesOperator:ManagedTunnelName is required.");
         }
 
+        if (string.IsNullOrWhiteSpace(options.OwnershipConfigMapNamespace))
+        {
+            failures.Add("KubernetesOperator:OwnershipConfigMapNamespace is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(options.OwnershipConfigMapName))
+        {
+            failures.Add("KubernetesOperator:OwnershipConfigMapName is required.");
+        }
+
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
     }
 }

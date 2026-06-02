@@ -7,6 +7,7 @@
 
   <PropertyGroup>
     <AssemblyName>Promethix.CloudflareTunnelOperator.Routing.Integrations.Cloudflare</AssemblyName>
+    <NoWarn>$(NoWarn);CA1812</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

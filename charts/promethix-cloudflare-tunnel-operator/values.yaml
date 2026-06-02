@@ -21,6 +21,8 @@ operator:
   managedClassName: public
   managedTunnelName: delta-public
   ownershipTag: promethix-cloudflare-tunnel-operator
+  ownershipConfigMapNamespace: edge-system
+  ownershipConfigMapName: promethix-cloudflare-tunnel-operator-ownership
   applyChanges: false
   reconciliationIntervalSeconds: 30
 

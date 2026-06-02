@@ -7,4 +7,8 @@ public sealed class KubernetesOperatorOptions
     public string ManagedClassName { get; set; } = "public";
 
     public string ManagedTunnelName { get; set; } = "delta-public";
+
+    public string OwnershipConfigMapNamespace { get; set; } = "edge-system";
+
+    public string OwnershipConfigMapName { get; set; } = "promethix-cloudflare-tunnel-operator-ownership";
 }

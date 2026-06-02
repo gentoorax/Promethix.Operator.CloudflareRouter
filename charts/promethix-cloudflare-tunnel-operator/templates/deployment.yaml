@@ -38,7 +38,13 @@ spec:
               value: {{ .Values.operator.managedClassName | quote }}
             - name: KubernetesOperator__ManagedTunnelName
               value: {{ .Values.operator.managedTunnelName | quote }}
+            - name: KubernetesOperator__OwnershipConfigMapNamespace
+              value: {{ .Values.operator.ownershipConfigMapNamespace | quote }}
+            - name: KubernetesOperator__OwnershipConfigMapName
+              value: {{ .Values.operator.ownershipConfigMapName | quote }}
             - name: RoutingOperator__OwnershipTag
+              value: {{ .Values.operator.ownershipTag | quote }}
+            - name: CloudflareTunnel__OwnershipTag
               value: {{ .Values.operator.ownershipTag | quote }}
             - name: RoutingOperator__ApplyChanges
               value: {{ .Values.operator.applyChanges | quote }}

@@ -34,7 +34,15 @@ builder.Services.AddSingleton<RouteReconciler>();
 builder.Services.AddSingleton<OperatorState>();
 builder.Services.AddSingleton(KubernetesClientFactory.Create);
 builder.Services.AddSingleton<IClusterRouteIntentSource, KubernetesRouteIntentSource>();
-builder.Services.AddSingleton<ICloudflareTunnelRouteClient, CloudflareTunnelRouteClient>();
+builder.Services.AddSingleton<IManagedRouteOwnershipStore, KubernetesOwnershipStore>();
+builder.Services.AddHttpClient<ICloudflareTunnelRouteClient, CloudflareTunnelRouteClient>(
+    (serviceProvider, httpClient) =>
+    {
+        var tunnelOptions = serviceProvider.GetRequiredService<IOptions<CloudflareTunnelOptions>>();
+        httpClient.BaseAddress = new Uri("https://api.cloudflare.com/client/v4/");
+        httpClient.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", tunnelOptions.Value.ApiToken);
+    });
 builder.Services.AddHostedService<OperatorWorker>();
 
 builder.Services
