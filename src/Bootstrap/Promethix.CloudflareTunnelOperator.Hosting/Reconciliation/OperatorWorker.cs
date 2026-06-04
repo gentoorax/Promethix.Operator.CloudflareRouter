@@ -51,23 +51,14 @@ internal sealed class OperatorWorker(
 
         try
         {
-            await PrepareLifecycleAsync(workItem, cancellationToken).ConfigureAwait(false);
-
-            var result = await reconciler.ReconcileAsync(options.Value, cancellationToken).ConfigureAwait(false);
-            state.MarkReconciliationCompleted(result.CompletedAt);
-            await EnsureManagedFinalizersAsync(result, cancellationToken).ConfigureAwait(false);
-            await statusUpdater.UpdateAsync(result, failure: null, cancellationToken).ConfigureAwait(false);
-            await FinalizeLifecycleAsync(workItem, cancellationToken).ConfigureAwait(false);
-
-            LogReconciliationCompleted(
-                logger,
-                result.Intent.Source,
-                result.Plan.ToCreate.Count,
-                result.Plan.ToUpdate.Count,
-                result.Plan.ToDelete.Count,
-                result.Plan.Conflicts.Count,
-                result.ChangesApplied,
-                null);
+            if (workItem.Kind == RouteIntentWorkItemKind.Resource && workItem.ResourceKey is { } resourceKey)
+            {
+                await RunResourceIterationAsync(resourceKey, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                await RunFullIterationAsync(cancellationToken).ConfigureAwait(false);
+            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -86,30 +77,26 @@ internal sealed class OperatorWorker(
         }
     }
 
-    private async Task PrepareLifecycleAsync(RouteIntentWorkItem workItem, CancellationToken cancellationToken)
+    private async Task RunFullIterationAsync(CancellationToken cancellationToken)
     {
-        if (workItem.Kind != RouteIntentWorkItemKind.Resource || workItem.ResourceKey is not { } key)
-        {
-            return;
-        }
+        var result = await reconciler.ReconcileAsync(options.Value, cancellationToken).ConfigureAwait(false);
+        state.MarkReconciliationCompleted(result.CompletedAt);
+        await EnsureManagedFinalizersAsync(result, cancellationToken).ConfigureAwait(false);
+        await statusUpdater.UpdateAsync(result, failure: null, cancellationToken).ConfigureAwait(false);
 
-        var resource = await resourceClient.GetAsync(key, cancellationToken).ConfigureAwait(false);
-
-        if (resource is null || KubernetesTunnelPublicHostnameClient.IsDeleting(resource) || !resourceClient.IsManaged(resource))
-        {
-            return;
-        }
-
-        await resourceClient.EnsureFinalizerAsync(key, cancellationToken).ConfigureAwait(false);
+        LogReconciliationCompleted(
+            logger,
+            result.Intent.Source,
+            result.Plan.ToCreate.Count,
+            result.Plan.ToUpdate.Count,
+            result.Plan.ToDelete.Count,
+            result.Plan.Conflicts.Count,
+            result.ChangesApplied,
+            null);
     }
 
-    private async Task FinalizeLifecycleAsync(RouteIntentWorkItem workItem, CancellationToken cancellationToken)
+    private async Task RunResourceIterationAsync(TunnelPublicHostnameResourceKey key, CancellationToken cancellationToken)
     {
-        if (workItem.Kind != RouteIntentWorkItemKind.Resource || workItem.ResourceKey is not { } key)
-        {
-            return;
-        }
-
         var resource = await resourceClient.GetAsync(key, cancellationToken).ConfigureAwait(false);
 
         if (resource is null)
@@ -117,10 +104,47 @@ internal sealed class OperatorWorker(
             return;
         }
 
-        if (KubernetesTunnelPublicHostnameClient.IsDeleting(resource) || !resourceClient.IsManaged(resource))
+        if (KubernetesTunnelPublicHostnameClient.IsDeleting(resource) || (!resourceClient.IsManaged(resource) && resourceClient.HasManagedFinalizer(resource)))
         {
-            await resourceClient.RemoveFinalizerAsync(key, cancellationToken).ConfigureAwait(false);
+            await CleanupResourceAsync(resource, cancellationToken).ConfigureAwait(false);
+            return;
         }
+
+        if (!resourceClient.IsManaged(resource))
+        {
+            return;
+        }
+
+        await resourceClient.EnsureFinalizerAsync(key, cancellationToken).ConfigureAwait(false);
+
+        if (!resourceClient.TryBuildIntent(resource, out var managedIntent, out var invalidIntent))
+        {
+            if (invalidIntent is not null)
+            {
+                await statusUpdater.UpdateInvalidAsync(invalidIntent, cancellationToken).ConfigureAwait(false);
+            }
+
+            return;
+        }
+
+        if (managedIntent is null)
+        {
+            return;
+        }
+
+        var result = await reconciler.ReconcileManagedRouteAsync(options.Value, managedIntent, cancellationToken).ConfigureAwait(false);
+        state.MarkReconciliationCompleted(result.CompletedAt);
+        await statusUpdater.UpdateAsync(result, failure: null, cancellationToken).ConfigureAwait(false);
+
+        LogReconciliationCompleted(
+            logger,
+            result.Intent.Source,
+            result.Plan.ToCreate.Count,
+            result.Plan.ToUpdate.Count,
+            result.Plan.ToDelete.Count,
+            result.Plan.Conflicts.Count,
+            result.ChangesApplied,
+            null);
     }
 
     private async Task EnsureManagedFinalizersAsync(ReconciliationResult result, CancellationToken cancellationToken)
@@ -130,6 +154,47 @@ internal sealed class OperatorWorker(
             await resourceClient.EnsureFinalizerAsync(
                 new TunnelPublicHostnameResourceKey(intent.Namespace, intent.Name),
                 cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task CleanupResourceAsync(TunnelPublicHostnameCustomResource resource, CancellationToken cancellationToken)
+    {
+        var key = new TunnelPublicHostnameResourceKey(
+            resource.Metadata.NamespaceProperty ?? string.Empty,
+            resource.Metadata.Name ?? string.Empty);
+        var cleanupHostname = KubernetesTunnelPublicHostnameClient.GetCleanupHostname(resource);
+
+        await statusUpdater.UpdateCleanupAsync(
+            key.Namespace,
+            key.Name,
+            resource.Metadata.Generation,
+            cleanupHostname,
+            completed: false,
+            message: "Cleaning up managed route before removing finalizer.",
+            cancellationToken).ConfigureAwait(false);
+
+        if (!string.IsNullOrWhiteSpace(cleanupHostname))
+        {
+            var cleanupResult = await reconciler.CleanupRouteAsync(options.Value, cleanupHostname, cancellationToken).ConfigureAwait(false);
+
+            if (cleanupResult.Plan.HasChanges && !cleanupResult.ChangesApplied)
+            {
+                return;
+            }
+        }
+
+        await statusUpdater.UpdateCleanupAsync(
+            key.Namespace,
+            key.Name,
+            resource.Metadata.Generation,
+            cleanupHostname,
+            completed: true,
+            message: "Managed route cleanup completed.",
+            cancellationToken).ConfigureAwait(false);
+
+        if (resourceClient.HasManagedFinalizer(resource))
+        {
+            await resourceClient.RemoveFinalizerAsync(key, cancellationToken).ConfigureAwait(false);
         }
     }
 }

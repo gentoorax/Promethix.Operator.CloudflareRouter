@@ -121,6 +121,61 @@ public sealed class KubernetesTunnelPublicHostnameClient(
         return PatchFinalizerAsync(key, addFinalizer: false, cancellationToken);
     }
 
+    public bool HasManagedFinalizer(TunnelPublicHostnameCustomResource resource)
+    {
+        ArgumentNullException.ThrowIfNull(resource);
+
+        return resource.Metadata.Finalizers?.Contains(options.Value.ManagedFinalizerName, StringComparer.Ordinal) == true;
+    }
+
+    public static string? GetCleanupHostname(TunnelPublicHostnameCustomResource resource)
+    {
+        ArgumentNullException.ThrowIfNull(resource);
+
+        if (!string.IsNullOrWhiteSpace(resource.Status?.AppliedHostname))
+        {
+            return resource.Status.AppliedHostname;
+        }
+
+        return string.IsNullOrWhiteSpace(resource.Spec.Hostname) ? null : resource.Spec.Hostname;
+    }
+
+    public bool TryBuildIntent(
+        TunnelPublicHostnameCustomResource resource,
+        out ManagedRouteIntent? managedIntent,
+        out InvalidRouteIntent? invalidIntent)
+    {
+        ArgumentNullException.ThrowIfNull(resource);
+
+        managedIntent = null;
+        invalidIntent = null;
+
+        try
+        {
+            managedIntent = new ManagedRouteIntent(
+                resource.Metadata.Name ?? string.Empty,
+                resource.Metadata.NamespaceProperty ?? string.Empty,
+                resource.Metadata.Generation,
+                ToRoute(resource, routingOptions.Value.OwnershipTag));
+            return true;
+        }
+        catch (ArgumentException ex)
+        {
+            invalidIntent = CreateInvalidIntent(resource, ex.Message);
+            return false;
+        }
+        catch (InvalidOperationException ex)
+        {
+            invalidIntent = CreateInvalidIntent(resource, ex.Message);
+            return false;
+        }
+        catch (UriFormatException ex)
+        {
+            invalidIntent = CreateInvalidIntent(resource, ex.Message);
+            return false;
+        }
+    }
+
     private async Task<TunnelPublicHostnameCustomResourceList> ListAsync(CancellationToken cancellationToken)
     {
         var payload = await kubernetes.CustomObjects.ListClusterCustomObjectAsync(

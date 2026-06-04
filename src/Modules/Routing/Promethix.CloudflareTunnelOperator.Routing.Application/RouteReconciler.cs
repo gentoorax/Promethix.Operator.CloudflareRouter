@@ -39,4 +39,66 @@ public sealed class RouteReconciler(
             throw new ReconciliationFailedException(intent, ex);
         }
     }
+
+    public async Task<ReconciliationResult> ReconcileManagedRouteAsync(
+        RoutingOperatorOptions options,
+        ManagedRouteIntent intent,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(intent);
+
+        var startedAt = clock.UtcNow;
+        var document = new RouteIntentDocument("kubernetes-crd:targeted", [intent], []);
+
+        try
+        {
+            var actualRoutes = await routeClient.GetRoutesAsync(cancellationToken).ConfigureAwait(false);
+            var plan = RoutePlanner.BuildManagePlan(intent.Route, actualRoutes, options.OwnershipTag);
+
+            if (options.ApplyChanges && plan.HasChanges && plan.Conflicts.Count == 0)
+            {
+                await routeClient.ApplyAsync(plan, cancellationToken).ConfigureAwait(false);
+            }
+
+            return new ReconciliationResult(
+                startedAt,
+                clock.UtcNow,
+                document,
+                plan,
+                options.ApplyChanges && plan.HasChanges && plan.Conflicts.Count == 0);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+#pragma warning disable CA1031
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            throw new ReconciliationFailedException(document, ex);
+        }
+    }
+
+    public async Task<RouteCleanupResult> CleanupRouteAsync(
+        RoutingOperatorOptions options,
+        string hostname,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentException.ThrowIfNullOrWhiteSpace(hostname);
+
+        var actualRoutes = await routeClient.GetRoutesAsync(cancellationToken).ConfigureAwait(false);
+        var plan = RoutePlanner.BuildCleanupPlan(hostname, actualRoutes, options.OwnershipTag);
+
+        if (options.ApplyChanges && plan.HasChanges && plan.Conflicts.Count == 0)
+        {
+            await routeClient.ApplyAsync(plan, cancellationToken).ConfigureAwait(false);
+        }
+
+        return new RouteCleanupResult(
+            hostname,
+            plan,
+            options.ApplyChanges && plan.HasChanges && plan.Conflicts.Count == 0);
+    }
 }

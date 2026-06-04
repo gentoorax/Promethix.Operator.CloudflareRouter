@@ -38,43 +38,32 @@ public sealed class KubernetesRouteIntentStatusUpdater(
 
         foreach (var invalid in result.Intent.InvalidRoutes)
         {
-            await UpdateStatusAsync(
-                invalid.Namespace,
-                invalid.Name,
-                CreateStatus(
-                    invalid.Generation,
-                    routingOptions.Value.OwnershipTag,
-                    options.Value.ManagedTunnelName,
-                    null,
-                    "False",
-                    "InvalidSpec",
-                    invalid.Reason),
-                cancellationToken).ConfigureAwait(false);
+            await UpdateInvalidAsync(invalid, cancellationToken).ConfigureAwait(false);
         }
 
         foreach (var intent in result.Intent.ManagedRoutes)
         {
-            var conditionStatus = "True";
-            var reason = "Reconciled";
-            var message = "Route intent reconciled.";
+            var readyStatus = "True";
+            var readyReason = "Reconciled";
+            var readyMessage = "Route intent reconciled.";
 
             if (failure is not null)
             {
-                conditionStatus = "False";
-                reason = "ReconcileFailed";
-                message = failure.Message;
+                readyStatus = "False";
+                readyReason = "ReconcileFailed";
+                readyMessage = failure.Message;
             }
             else if (conflictHostnames.Contains(intent.Route.Hostname))
             {
-                conditionStatus = "False";
-                reason = "Conflict";
-                message = "Hostname exists in Cloudflare but is not owned by this operator.";
+                readyStatus = "False";
+                readyReason = "Conflict";
+                readyMessage = "Hostname exists in Cloudflare but is not owned by this operator.";
             }
             else if (!result.ChangesApplied && plannedHostnames.Contains(intent.Route.Hostname))
             {
-                conditionStatus = "False";
-                reason = "Planned";
-                message = "Route change planned but not applied.";
+                readyStatus = "False";
+                readyReason = "Planned";
+                readyMessage = "Route change planned but not applied.";
             }
 
             await UpdateStatusAsync(
@@ -85,9 +74,15 @@ public sealed class KubernetesRouteIntentStatusUpdater(
                     routingOptions.Value.OwnershipTag,
                     options.Value.ManagedTunnelName,
                     intent.Route.Hostname,
-                    conditionStatus,
-                    reason,
-                    message),
+                    readyStatus,
+                    readyReason,
+                    readyMessage,
+                    "True",
+                    "Validated",
+                    "Route intent is valid.",
+                    "False",
+                    "NotDeleting",
+                    "Resource is not being deleted."),
                 cancellationToken).ConfigureAwait(false);
         }
     }
@@ -99,18 +94,7 @@ public sealed class KubernetesRouteIntentStatusUpdater(
 
         foreach (var invalid in intent.InvalidRoutes)
         {
-            await UpdateStatusAsync(
-                invalid.Namespace,
-                invalid.Name,
-                CreateStatus(
-                    invalid.Generation,
-                    routingOptions.Value.OwnershipTag,
-                    options.Value.ManagedTunnelName,
-                    null,
-                    "False",
-                    "InvalidSpec",
-                    invalid.Reason),
-                cancellationToken).ConfigureAwait(false);
+            await UpdateInvalidAsync(invalid, cancellationToken).ConfigureAwait(false);
         }
 
         foreach (var intentRoute in intent.ManagedRoutes)
@@ -125,9 +109,68 @@ public sealed class KubernetesRouteIntentStatusUpdater(
                     intentRoute.Route.Hostname,
                     "False",
                     "ReconcileFailed",
-                    failure.Message),
+                    failure.Message,
+                    "True",
+                    "Validated",
+                    "Route intent is valid.",
+                    "False",
+                    "NotDeleting",
+                    "Resource is not being deleted."),
                 cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    public Task UpdateInvalidAsync(InvalidRouteIntent invalidIntent, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(invalidIntent);
+
+        return UpdateStatusAsync(
+            invalidIntent.Namespace,
+            invalidIntent.Name,
+            CreateStatus(
+                invalidIntent.Generation,
+                routingOptions.Value.OwnershipTag,
+                options.Value.ManagedTunnelName,
+                null,
+                "False",
+                "InvalidSpec",
+                invalidIntent.Reason,
+                "False",
+                "InvalidSpec",
+                invalidIntent.Reason,
+                "False",
+                "NotDeleting",
+                "Resource is not being deleted."),
+            cancellationToken);
+    }
+
+    public Task UpdateCleanupAsync(
+        string resourceNamespace,
+        string name,
+        long? observedGeneration,
+        string? appliedHostname,
+        bool completed,
+        string message,
+        CancellationToken cancellationToken)
+    {
+        return UpdateStatusAsync(
+            resourceNamespace,
+            name,
+            CreateStatus(
+                observedGeneration,
+                routingOptions.Value.OwnershipTag,
+                options.Value.ManagedTunnelName,
+                appliedHostname,
+                "False",
+                completed ? "Deleted" : "CleanupPending",
+                completed ? "Managed route cleanup completed." : message,
+                "Unknown",
+                "Deleting",
+                "Resource is being deleted or removed from managed scope.",
+                completed ? "False" : "True",
+                completed ? "CleanedUp" : "CleanupPending",
+                completed ? "Managed route cleanup completed." : message),
+            cancellationToken);
     }
 
     private async Task UpdateStatusAsync(string @namespace, string name, TunnelPublicHostnameStatus status, CancellationToken cancellationToken)
@@ -174,9 +217,15 @@ public sealed class KubernetesRouteIntentStatusUpdater(
         string ownershipTag,
         string tunnelName,
         string? appliedHostname,
-        string conditionStatus,
-        string reason,
-        string message)
+        string readyStatus,
+        string readyReason,
+        string readyMessage,
+        string specValidStatus,
+        string specValidReason,
+        string specValidMessage,
+        string cleanupStatus,
+        string cleanupReason,
+        string cleanupMessage)
     {
         var status = new TunnelPublicHostnameStatus
         {
@@ -186,16 +235,27 @@ public sealed class KubernetesRouteIntentStatusUpdater(
             AppliedHostname = appliedHostname,
         };
 
-        status.Conditions.Add(new V1Condition
+        status.Conditions.Add(CreateCondition("Ready", readyStatus, readyReason, readyMessage, observedGeneration));
+        status.Conditions.Add(CreateCondition("SpecValid", specValidStatus, specValidReason, specValidMessage, observedGeneration));
+        status.Conditions.Add(CreateCondition("Cleanup", cleanupStatus, cleanupReason, cleanupMessage, observedGeneration));
+        return status;
+    }
+
+    private static V1Condition CreateCondition(
+        string type,
+        string status,
+        string reason,
+        string message,
+        long? observedGeneration)
+    {
+        return new V1Condition
         {
-            Type = "Ready",
-            Status = conditionStatus,
+            Type = type,
+            Status = status,
             Reason = reason,
             Message = message,
             LastTransitionTime = DateTime.UtcNow,
             ObservedGeneration = observedGeneration,
-        });
-
-        return status;
+        };
     }
 }

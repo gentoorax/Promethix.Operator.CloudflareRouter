@@ -56,4 +56,41 @@ public sealed class RoutePlannerTests
         plan.ToCreate.Should().BeEmpty();
         plan.ToUpdate.Should().BeEmpty();
     }
+
+    [Fact]
+    public void BuildManagePlanShouldNotScheduleDeletionOfOtherOwnedRoutes()
+    {
+        var desired = PublicHostnameRoute.Create(
+            "app.example.com",
+            new Uri("https://app.default.svc.cluster.local:8443"),
+            RouteProtocol.Https,
+            OwnershipTag);
+        var actual = new[]
+        {
+            PublicHostnameRoute.Create("app.example.com", new Uri("https://old.default.svc.cluster.local:8443"), RouteProtocol.Https, OwnershipTag),
+            PublicHostnameRoute.Create("other.example.com", new Uri("https://other.default.svc.cluster.local:8443"), RouteProtocol.Https, OwnershipTag),
+        };
+
+        var plan = RoutePlanner.BuildManagePlan(desired, actual, OwnershipTag);
+
+        plan.ToUpdate.Should().ContainSingle().Which.Hostname.Should().Be("app.example.com");
+        plan.ToDelete.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void BuildCleanupPlanShouldDeleteOnlyOwnedMatchingHostname()
+    {
+        var actual = new[]
+        {
+            PublicHostnameRoute.Create("app.example.com", new Uri("https://app.default.svc.cluster.local:8443"), RouteProtocol.Https, OwnershipTag),
+            PublicHostnameRoute.Create("shared.example.com", new Uri("https://shared.default.svc.cluster.local:8443"), RouteProtocol.Https, "another-operator"),
+        };
+
+        var plan = RoutePlanner.BuildCleanupPlan("app.example.com", actual, OwnershipTag);
+
+        plan.ToDelete.Should().ContainSingle().Which.Hostname.Should().Be("app.example.com");
+        plan.ToCreate.Should().BeEmpty();
+        plan.ToUpdate.Should().BeEmpty();
+        plan.Conflicts.Should().BeEmpty();
+    }
 }
