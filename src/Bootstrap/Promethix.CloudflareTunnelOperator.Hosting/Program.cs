@@ -32,9 +32,11 @@ builder.Services.AddSingleton<IValidateOptions<KubernetesOperatorOptions>, Kuber
 builder.Services.AddSingleton<IClock, SystemClock>();
 builder.Services.AddSingleton<RouteReconciler>();
 builder.Services.AddSingleton<OperatorState>();
+builder.Services.AddSingleton<ReconciliationSignalQueue>();
 builder.Services.AddSingleton(KubernetesClientFactory.Create);
 builder.Services.AddSingleton<IClusterRouteIntentSource, KubernetesRouteIntentSource>();
 builder.Services.AddSingleton<IManagedRouteOwnershipStore, KubernetesOwnershipStore>();
+builder.Services.AddSingleton<IRouteIntentStatusUpdater, KubernetesRouteIntentStatusUpdater>();
 builder.Services.AddHttpClient<ICloudflareTunnelRouteClient, CloudflareTunnelRouteClient>(
     (serviceProvider, httpClient) =>
     {
@@ -43,6 +45,7 @@ builder.Services.AddHttpClient<ICloudflareTunnelRouteClient, CloudflareTunnelRou
         httpClient.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", tunnelOptions.Value.ApiToken);
     });
+builder.Services.AddHostedService<RouteIntentWatchService>();
 builder.Services.AddHostedService<OperatorWorker>();
 
 builder.Services

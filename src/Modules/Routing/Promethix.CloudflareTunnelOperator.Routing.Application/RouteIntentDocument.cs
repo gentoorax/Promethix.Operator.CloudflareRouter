@@ -4,4 +4,8 @@ namespace Promethix.CloudflareTunnelOperator.Routing.Application;
 
 public sealed record RouteIntentDocument(
     string Source,
-    IReadOnlyCollection<PublicHostnameRoute> Routes);
+    IReadOnlyCollection<ManagedRouteIntent> ManagedRoutes,
+    IReadOnlyCollection<InvalidRouteIntent> InvalidRoutes)
+{
+    public IReadOnlyCollection<PublicHostnameRoute> Routes => ManagedRoutes.Select(intent => intent.Route).ToArray();
+}

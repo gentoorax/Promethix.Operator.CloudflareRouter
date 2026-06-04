@@ -5,6 +5,8 @@ namespace Promethix.CloudflareTunnelOperator.Hosting.Reconciliation;
 
 internal sealed class OperatorWorker(
     RouteReconciler reconciler,
+    IRouteIntentStatusUpdater statusUpdater,
+    ReconciliationSignalQueue signalQueue,
     IOptions<RoutingOperatorOptions> options,
     OperatorState state,
     ILogger<OperatorWorker> logger) : BackgroundService
@@ -21,37 +23,60 @@ internal sealed class OperatorWorker(
             new EventId(2001, "ReconciliationFailed"),
             "Reconciliation iteration failed.");
 
+    private static readonly Action<ILogger, string, Exception?> LogReconciliationTriggered =
+        LoggerMessage.Define<string>(
+            LogLevel.Information,
+            new EventId(2002, "ReconciliationTriggered"),
+            "Starting reconciliation triggered by {TriggerReason}.");
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        await RunIterationAsync("startup", stoppingToken).ConfigureAwait(false);
+
         while (!stoppingToken.IsCancellationRequested)
         {
-            try
-            {
-                var result = await reconciler.ReconcileAsync(options.Value, stoppingToken).ConfigureAwait(false);
-                state.MarkReconciliationCompleted(result.CompletedAt);
+            var triggerReason = await signalQueue
+                .WaitAsync(TimeSpan.FromSeconds(options.Value.ReconciliationIntervalSeconds), stoppingToken)
+                .ConfigureAwait(false);
 
-                LogReconciliationCompleted(
-                    logger,
-                    result.Intent.Source,
-                    result.Plan.ToCreate.Count,
-                    result.Plan.ToUpdate.Count,
-                    result.Plan.ToDelete.Count,
-                    result.Plan.Conflicts.Count,
-                    result.ChangesApplied,
-                    null);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
+            await RunIterationAsync(triggerReason, stoppingToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task RunIterationAsync(string triggerReason, CancellationToken cancellationToken)
+    {
+        LogReconciliationTriggered(logger, triggerReason, null);
+
+        try
+        {
+            var result = await reconciler.ReconcileAsync(options.Value, cancellationToken).ConfigureAwait(false);
+            state.MarkReconciliationCompleted(result.CompletedAt);
+            await statusUpdater.UpdateAsync(result, failure: null, cancellationToken).ConfigureAwait(false);
+
+            LogReconciliationCompleted(
+                logger,
+                result.Intent.Source,
+                result.Plan.ToCreate.Count,
+                result.Plan.ToUpdate.Count,
+                result.Plan.ToDelete.Count,
+                result.Plan.Conflicts.Count,
+                result.ChangesApplied,
+                null);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (ReconciliationFailedException ex) when (ex.Intent is not null && ex.InnerException is not null)
+        {
+            await statusUpdater.UpdateFailureAsync(ex.Intent, ex.InnerException, cancellationToken).ConfigureAwait(false);
+            LogReconciliationFailed(logger, ex.InnerException);
+        }
 #pragma warning disable CA1031
-            catch (Exception ex)
+        catch (Exception ex)
 #pragma warning restore CA1031
-            {
-                LogReconciliationFailed(logger, ex);
-            }
-
-            await Task.Delay(TimeSpan.FromSeconds(options.Value.ReconciliationIntervalSeconds), stoppingToken).ConfigureAwait(false);
+        {
+            LogReconciliationFailed(logger, ex);
         }
     }
 }

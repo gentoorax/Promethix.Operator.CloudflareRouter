@@ -11,19 +11,32 @@ public sealed class RouteReconciler(
 
         var startedAt = clock.UtcNow;
         var intent = await intentSource.GetDesiredRoutesAsync(cancellationToken).ConfigureAwait(false);
-        var actualRoutes = await routeClient.GetRoutesAsync(cancellationToken).ConfigureAwait(false);
-        var plan = RoutePlanner.BuildPlan(intent.Routes, actualRoutes, options.OwnershipTag);
-
-        if (options.ApplyChanges && plan.HasChanges && plan.Conflicts.Count == 0)
+        try
         {
-            await routeClient.ApplyAsync(plan, cancellationToken).ConfigureAwait(false);
-        }
+            var actualRoutes = await routeClient.GetRoutesAsync(cancellationToken).ConfigureAwait(false);
+            var plan = RoutePlanner.BuildPlan(intent.Routes, actualRoutes, options.OwnershipTag);
 
-        return new ReconciliationResult(
-            startedAt,
-            clock.UtcNow,
-            intent,
-            plan,
-            options.ApplyChanges && plan.HasChanges && plan.Conflicts.Count == 0);
+            if (options.ApplyChanges && plan.HasChanges && plan.Conflicts.Count == 0)
+            {
+                await routeClient.ApplyAsync(plan, cancellationToken).ConfigureAwait(false);
+            }
+
+            return new ReconciliationResult(
+                startedAt,
+                clock.UtcNow,
+                intent,
+                plan,
+                options.ApplyChanges && plan.HasChanges && plan.Conflicts.Count == 0);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+#pragma warning disable CA1031
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            throw new ReconciliationFailedException(intent, ex);
+        }
     }
 }

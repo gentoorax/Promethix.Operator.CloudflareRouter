@@ -33,18 +33,54 @@ public sealed class KubernetesRouteIntentSource(
             JsonSerializer.Serialize(payload),
             JsonOptions) ?? new TunnelPublicHostnameCustomResourceList();
 
-        var routes = list.Items
-            .Where(resource => resource.Spec.Enabled)
-            .Where(resource => string.Equals(resource.Spec.ClassName, options.Value.ManagedClassName, StringComparison.Ordinal))
-            .Where(resource => string.Equals(resource.Spec.TunnelRef.Name, options.Value.ManagedTunnelName, StringComparison.Ordinal))
-            .Select(resource => ToRoute(resource, routingOptions.Value.OwnershipTag))
-            .ToArray();
+        var managedRoutes = new List<ManagedRouteIntent>();
+        var invalidRoutes = new List<InvalidRouteIntent>();
 
-        LogLoadedIntent(logger, routes.Length, options.Value.ManagedClassName, options.Value.ManagedTunnelName, null);
+        foreach (var resource in list.Items
+                     .Where(resource => resource.Spec.Enabled)
+                     .Where(resource => string.Equals(resource.Spec.ClassName, options.Value.ManagedClassName, StringComparison.Ordinal))
+                     .Where(resource => string.Equals(resource.Spec.TunnelRef.Name, options.Value.ManagedTunnelName, StringComparison.Ordinal)))
+        {
+            try
+            {
+                managedRoutes.Add(new ManagedRouteIntent(
+                    resource.Metadata.Name ?? string.Empty,
+                    resource.Metadata.NamespaceProperty ?? string.Empty,
+                    resource.Metadata.Generation,
+                    ToRoute(resource, routingOptions.Value.OwnershipTag)));
+            }
+            catch (ArgumentException ex)
+            {
+                invalidRoutes.Add(new InvalidRouteIntent(
+                    resource.Metadata.Name ?? string.Empty,
+                    resource.Metadata.NamespaceProperty ?? string.Empty,
+                    resource.Metadata.Generation,
+                    ex.Message));
+            }
+            catch (InvalidOperationException ex)
+            {
+                invalidRoutes.Add(new InvalidRouteIntent(
+                    resource.Metadata.Name ?? string.Empty,
+                    resource.Metadata.NamespaceProperty ?? string.Empty,
+                    resource.Metadata.Generation,
+                    ex.Message));
+            }
+            catch (UriFormatException ex)
+            {
+                invalidRoutes.Add(new InvalidRouteIntent(
+                    resource.Metadata.Name ?? string.Empty,
+                    resource.Metadata.NamespaceProperty ?? string.Empty,
+                    resource.Metadata.Generation,
+                    ex.Message));
+            }
+        }
+
+        LogLoadedIntent(logger, managedRoutes.Count, options.Value.ManagedClassName, options.Value.ManagedTunnelName, null);
 
         return new RouteIntentDocument(
             Source: $"kubernetes-crd:{TunnelPublicHostnameCustomResource.PluralName}",
-            Routes: routes);
+            ManagedRoutes: managedRoutes,
+            InvalidRoutes: invalidRoutes);
     }
 
     private static PublicHostnameRoute ToRoute(TunnelPublicHostnameCustomResource resource, string ownershipTag)
