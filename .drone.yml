@@ -1,0 +1,146 @@
+# Continuous integration pipeline.
+# Runs for normal verification and does not publish images.
+kind: pipeline
+type: docker
+name: ci
+
+trigger:
+  event:
+    - push
+    - pull_request
+    - tag
+    - custom
+
+steps:
+  - name: restore
+    image: mcr.microsoft.com/dotnet/sdk:10.0
+    environment:
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
+      DOTNET_NOLOGO: "1"
+    commands:
+      - dotnet restore Promethix.CloudflareTunnelOperator.slnx
+
+  - name: build
+    image: mcr.microsoft.com/dotnet/sdk:10.0
+    depends_on:
+      - restore
+    environment:
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
+      DOTNET_NOLOGO: "1"
+    commands:
+      - dotnet build Promethix.CloudflareTunnelOperator.slnx --configuration Release --no-restore
+
+  - name: test
+    image: mcr.microsoft.com/dotnet/sdk:10.0
+    depends_on:
+      - build
+    environment:
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
+      DOTNET_NOLOGO: "1"
+    commands:
+      - dotnet test Promethix.CloudflareTunnelOperator.slnx --configuration Release --no-build --logger "trx;LogFileName=tests.trx"
+
+---
+# Staging image build pipeline.
+# Builds once on main and publishes staging tags only.
+kind: pipeline
+type: docker
+name: image-publish-staging
+
+clone:
+  depth: 0
+
+trigger:
+  event:
+    - push
+    - custom
+  branch:
+    - main
+
+steps:
+  - name: calculate-build-metadata
+    image: alpine:3.21
+    commands:
+      - 'mkdir -p .drone; if [ -f .drone/version-prefix.env ]; then . .drone/version-prefix.env; fi; buildMajor="$${VERSION_MAJOR:-0}"; buildMinor="$${VERSION_MINOR:-1}"; buildRevision="$${VERSION_REVISION:-0}"; buildNumber="$${DRONE_BUILD_NUMBER:-0}"; buildSemver="$${buildMajor}.$${buildMinor}.$${buildRevision}"; stagingTag="$${buildSemver}-staging.$${buildNumber}"; releaseTag="$${buildSemver}.$${buildNumber}"; shortCommit="$(printf "%.12s" "$${DRONE_COMMIT_SHA}")"; buildDisplay="v$${buildSemver}"; buildDate="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; imageRepo="harbor.internal.promethix.net/promethix/cloudflare-tunnel-operator"; directProductionRelease="$${DIRECT_PRODUCTION_RELEASE:-false}"; printf "BUILD_MAJOR=%s\nBUILD_MINOR=%s\nBUILD_REVISION=%s\nBUILD_NUMBER=%s\nBUILD_SEMVER=%s\nSTAGING_TAG=%s\nRELEASE_TAG=%s\nSHORT_COMMIT=%s\nBUILD_DISPLAY=%s\nBUILD_DATE=%s\nIMAGE_REPO=%s\nDIRECT_PRODUCTION_RELEASE=%s\n" "$${buildMajor}" "$${buildMinor}" "$${buildRevision}" "$${buildNumber}" "$${buildSemver}" "$${stagingTag}" "$${releaseTag}" "$${shortCommit}" "$${buildDisplay}" "$${buildDate}" "$${imageRepo}" "$${directProductionRelease}" > .drone/build.env'
+
+  - name: announce-build-plan
+    image: alpine:3.21
+    depends_on:
+      - calculate-build-metadata
+    commands:
+      - '. .drone/build.env; echo "Planned staging publish:"; echo "  image repo: $${IMAGE_REPO}"; echo "  staging release tag: $${STAGING_TAG}"; echo "  staging alias tag: staging-latest"; if [ "$${DIRECT_PRODUCTION_RELEASE}" = "true" ]; then echo "  production release tag: $${RELEASE_TAG}"; echo "  production alias tag: latest"; fi'
+
+  - name: build-and-push-staging-image
+    image: gcr.io/kaniko-project/executor:v1.23.2-debug
+    depends_on:
+      - announce-build-plan
+    environment:
+      HOME: /kaniko
+      HARBOR_USERNAME:
+        from_secret: harbor_robot_username
+      HARBOR_PASSWORD:
+        from_secret: harbor_robot_password
+      HARBOR_CA_CERT:
+        from_secret: harbor_ca_cert
+    commands:
+      - '. .drone/build.env; if [ -z "$${HARBOR_USERNAME}" ] || [ -z "$${HARBOR_PASSWORD}" ]; then echo "Harbor secrets are missing (harbor_robot_username / harbor_robot_password)"; exit 1; fi; if [ -z "$${HARBOR_CA_CERT}" ]; then echo "Harbor CA secret is missing (harbor_ca_cert)"; exit 1; fi; harborAuth="$(printf "%s:%s" "$${HARBOR_USERNAME}" "$${HARBOR_PASSWORD}" | base64 | tr -d "\n")"; mkdir -p /kaniko/.docker; printf "{\"auths\":{\"harbor.internal.promethix.net\":{\"auth\":\"%s\"}}}" "$${harborAuth}" > /kaniko/.docker/config.json; mkdir -p /kaniko/ssl/certs; printf "%b" "$${HARBOR_CA_CERT}" > /kaniko/ssl/certs/harbor-ca.crt; destinationArgs="--destination $${IMAGE_REPO}:$${STAGING_TAG} --destination $${IMAGE_REPO}:staging-latest"; if [ "$${DIRECT_PRODUCTION_RELEASE}" = "true" ]; then destinationArgs="$${destinationArgs} --destination $${IMAGE_REPO}:$${RELEASE_TAG} --destination $${IMAGE_REPO}:latest"; fi; /kaniko/executor --context "$(pwd)" --dockerfile "$(pwd)/Dockerfile" --registry-certificate harbor.internal.promethix.net=/kaniko/ssl/certs/harbor-ca.crt --build-arg BUILD_MAJOR="$${BUILD_MAJOR}" --build-arg BUILD_MINOR="$${BUILD_MINOR}" --build-arg BUILD_REVISION="$${BUILD_REVISION}" --build-arg BUILD_NUMBER="$${BUILD_NUMBER}" --build-arg BUILD_SEMVER="$${BUILD_SEMVER}" --build-arg BUILD_COMMIT_SHA="$${DRONE_COMMIT_SHA}" --build-arg BUILD_DISPLAY="$${BUILD_DISPLAY}" --build-arg BUILD_DATE="$${BUILD_DATE}" $${destinationArgs}'
+
+---
+# Production promotion pipeline.
+# Retags an existing staging image to live production aliases without rebuilding it.
+kind: pipeline
+type: docker
+name: promote-production
+
+trigger:
+  event:
+    - promote
+  target:
+    - production
+
+steps:
+  - name: resolve-production-tags
+    image: quay.io/skopeo/stable:latest
+    environment:
+      HOME: /tmp
+      HARBOR_USERNAME:
+        from_secret: harbor_robot_username
+      HARBOR_PASSWORD:
+        from_secret: harbor_robot_password
+      HARBOR_CA_CERT:
+        from_secret: harbor_ca_cert
+    commands:
+      - 'mkdir -p .drone; if [ -z "$${HARBOR_USERNAME}" ] || [ -z "$${HARBOR_PASSWORD}" ]; then echo "Harbor secrets are missing (harbor_robot_username / harbor_robot_password)"; exit 1; fi; if [ -z "$${HARBOR_CA_CERT}" ]; then echo "Harbor CA secret is missing (harbor_ca_cert)"; exit 1; fi; mkdir -p /tmp/harbor-certs; printf "%b" "$${HARBOR_CA_CERT}" > /tmp/harbor-certs/harbor-ca.crt; imageRepo="harbor.internal.promethix.net/promethix/cloudflare-tunnel-operator"; sourceTag="$${SOURCE_IMAGE_TAG:-staging-latest}"; configJson="$(skopeo inspect --config --creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --cert-dir /tmp/harbor-certs "docker://$${imageRepo}:$${sourceTag}")"; buildSemver="$(printf "%s" "$${configJson}" | grep -o "\"org.opencontainers.image.version\":[[:space:]]*\"[^\"]*\"" | head -n 1 | sed "s/^\"org.opencontainers.image.version\":[[:space:]]*\"//; s/\"$//")"; buildNumber="$(printf "%s" "$${configJson}" | grep -o "\"org.promethix.build.number\":[[:space:]]*\"[^\"]*\"" | head -n 1 | sed "s/^\"org.promethix.build.number\":[[:space:]]*\"//; s/\"$//")"; if [ -z "$${buildSemver}" ] || [ -z "$${buildNumber}" ]; then echo "Unable to resolve image metadata from $${imageRepo}:$${sourceTag}"; echo "$${configJson}"; exit 1; fi; releaseTag="$${buildSemver}.$${buildNumber}"; printf "IMAGE_REPO=%s\nSOURCE_TAG=%s\nBUILD_SEMVER=%s\nBUILD_NUMBER=%s\nRELEASE_TAG=%s\n" "$${imageRepo}" "$${sourceTag}" "$${buildSemver}" "$${buildNumber}" "$${releaseTag}" > .drone/promote-production.env'
+
+  - name: announce-production-promotion
+    image: alpine:3.21
+    depends_on:
+      - resolve-production-tags
+    commands:
+      - '. .drone/promote-production.env'
+      - 'echo "Planned production promotion:"'
+      - 'echo "  source staging tag: $${SOURCE_TAG}"'
+      - 'echo "  latest"'
+      - 'echo "  $${RELEASE_TAG}"'
+
+  - name: retag-image-for-production
+    image: quay.io/skopeo/stable:latest
+    depends_on:
+      - announce-production-promotion
+    environment:
+      HOME: /tmp
+      HARBOR_USERNAME:
+        from_secret: harbor_robot_username
+      HARBOR_PASSWORD:
+        from_secret: harbor_robot_password
+      HARBOR_CA_CERT:
+        from_secret: harbor_ca_cert
+    commands:
+      - '. .drone/promote-production.env'
+      - 'mkdir -p /tmp/harbor-certs'
+      - 'printf "%b" "$${HARBOR_CA_CERT}" > /tmp/harbor-certs/harbor-ca.crt'
+      - 'skopeo copy --src-creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --dest-creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --src-cert-dir /tmp/harbor-certs --dest-cert-dir /tmp/harbor-certs "docker://$${IMAGE_REPO}:$${SOURCE_TAG}" "docker://$${IMAGE_REPO}:$${RELEASE_TAG}"'
+      - 'skopeo copy --src-creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --dest-creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --src-cert-dir /tmp/harbor-certs --dest-cert-dir /tmp/harbor-certs "docker://$${IMAGE_REPO}:$${SOURCE_TAG}" "docker://$${IMAGE_REPO}:latest"'
