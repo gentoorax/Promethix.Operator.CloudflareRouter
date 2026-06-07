@@ -18,6 +18,7 @@ steps:
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
       DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
       DOTNET_NOLOGO: "1"
+      NUGET_PACKAGES: /drone/src/.nuget/packages
     commands:
       - dotnet restore Promethix.CloudflareTunnelOperator.slnx
 
@@ -29,6 +30,7 @@ steps:
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
       DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
       DOTNET_NOLOGO: "1"
+      NUGET_PACKAGES: /drone/src/.nuget/packages
     commands:
       - dotnet build Promethix.CloudflareTunnelOperator.slnx --configuration Release --no-restore
 
@@ -40,6 +42,7 @@ steps:
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
       DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
       DOTNET_NOLOGO: "1"
+      NUGET_PACKAGES: /drone/src/.nuget/packages
     commands:
       - dotnet test Promethix.CloudflareTunnelOperator.slnx --configuration Release --no-build --logger "trx;LogFileName=tests.trx"
 
