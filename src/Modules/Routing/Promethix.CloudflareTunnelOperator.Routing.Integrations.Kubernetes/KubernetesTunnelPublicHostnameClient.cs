@@ -5,7 +5,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Promethix.CloudflareTunnelOperator.Routing.Application;
 using Promethix.CloudflareTunnelOperator.Routing.Domain;
-using System.Globalization;
 using System.Net;
 using System.Text.Json;
 
@@ -15,6 +14,7 @@ public sealed class KubernetesTunnelPublicHostnameClient(
     IKubernetes kubernetes,
     IOptions<KubernetesOperatorOptions> options,
     IOptions<RoutingOperatorOptions> routingOptions,
+    IIngressTargetValidator ingressTargetValidator,
     ILogger<KubernetesTunnelPublicHostnameClient> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -323,7 +323,7 @@ public sealed class KubernetesTunnelPublicHostnameClient(
                 $"Ingress target class '{ingress.ClassName}' does not match managed ingress class '{options.Value.ManagedIngressClassName}'.");
         }
 
-        await ValidateIngressTargetAsync(resource, ingress, cancellationToken).ConfigureAwait(false);
+        await ingressTargetValidator.ValidateAsync(resource, ingress, cancellationToken).ConfigureAwait(false);
 
         var targetUrl = ResolveIngressTargetUrl(ingress);
         var protocol = string.Equals(targetUrl.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
@@ -386,62 +386,5 @@ public sealed class KubernetesTunnelPublicHostnameClient(
         }
 
         return new Uri($"{scheme}://{ingress.Service.Name}.{ingress.Service.Namespace}.svc.cluster.local:{ingress.Service.Port}");
-    }
-
-    private async Task ValidateIngressTargetAsync(
-        TunnelPublicHostnameCustomResource resource,
-        TunnelIngressTargetSpec ingress,
-        CancellationToken cancellationToken)
-    {
-        var serviceNamespace = ingress.Service?.Namespace;
-        var serviceName = ingress.Service?.Name;
-        var servicePort = ingress.Service?.Port ?? 0;
-
-        if (!string.IsNullOrWhiteSpace(serviceNamespace) && !string.IsNullOrWhiteSpace(serviceName))
-        {
-            V1Service service;
-            try
-            {
-                service = await kubernetes.CoreV1.ReadNamespacedServiceAsync(
-                    serviceName,
-                    serviceNamespace,
-                    pretty: null,
-                    cancellationToken: cancellationToken).ConfigureAwait(false);
-            }
-            catch (HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
-            {
-                throw new InvalidOperationException(
-                    $"Referenced ingress service {serviceNamespace}/{serviceName} does not exist.",
-                    ex);
-            }
-
-            var portExists = service.Spec?.Ports?.Any(port =>
-                port.Port == servicePort ||
-                string.Equals(
-                    port.TargetPort?.ToString(),
-                    servicePort.ToString(CultureInfo.InvariantCulture),
-                    StringComparison.Ordinal)) == true;
-            if (!portExists)
-            {
-                throw new InvalidOperationException(
-                    $"Referenced ingress service {serviceNamespace}/{serviceName} does not expose port {servicePort}.");
-            }
-        }
-
-        var ingresses = await kubernetes.NetworkingV1.ListIngressForAllNamespacesAsync(
-            allowWatchBookmarks: false,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        var hostname = resource.Spec.Hostname.Trim();
-        var className = ingress.ClassName.Trim();
-        var matchExists = ingresses.Items.Any(item =>
-            string.Equals(item.Spec?.IngressClassName, className, StringComparison.Ordinal)
-            && item.Spec?.Rules?.Any(rule => string.Equals(rule.Host, hostname, StringComparison.OrdinalIgnoreCase)) == true);
-
-        if (!matchExists)
-        {
-            throw new InvalidOperationException(
-                $"No Kubernetes Ingress with class '{className}' publishes hostname '{hostname}'.");
-        }
     }
 }

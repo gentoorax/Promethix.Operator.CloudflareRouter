@@ -1,10 +1,7 @@
 using FluentAssertions;
 using k8s;
-using k8s.Autorest;
-using k8s.Models;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging.Abstractions;
-using Moq;
 using Promethix.CloudflareTunnelOperator.Hosting.Options;
 using Promethix.CloudflareTunnelOperator.Routing.Application;
 using Promethix.CloudflareTunnelOperator.Routing.Integrations.Kubernetes;
@@ -64,68 +61,8 @@ public sealed class TunnelPublicHostnameMappingTests
     [Fact]
     public async Task IngressTargetCanOverrideDefaultService()
     {
-        var coreV1 = new Mock<ICoreV1Operations>(MockBehavior.Strict);
-        coreV1
-            .Setup(client => client.ReadNamespacedServiceAsync(
-                "traefik-cloudflare-tunnel",
-                "edge-system",
-                null,
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new V1Service
-            {
-                Spec = new V1ServiceSpec
-                {
-                    Ports =
-                    [
-                        new V1ServicePort
-                        {
-                            Port = 443,
-                        }
-                    ],
-                },
-            });
-
-        var networkingV1 = new Mock<INetworkingV1Operations>(MockBehavior.Strict);
-        networkingV1
-            .Setup(client => client.ListIngressForAllNamespacesAsync(
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                false,
-                null,
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new V1IngressList
-            {
-                Items =
-                [
-                    new V1Ingress
-                    {
-                        Spec = new V1IngressSpec
-                        {
-                            IngressClassName = "traefik-cloudflare-tunnel",
-                            Rules =
-                            [
-                                new V1IngressRule
-                                {
-                                    Host = "whoami.delta.promethix.net",
-                                }
-                            ],
-                        },
-                    },
-                ],
-            });
-
-        var kubernetes = new Mock<IKubernetes>(MockBehavior.Strict);
-        kubernetes.SetupGet(client => client.CoreV1).Returns(coreV1.Object);
-        kubernetes.SetupGet(client => client.NetworkingV1).Returns(networkingV1.Object);
-
         var client = new KubernetesTunnelPublicHostnameClient(
-            kubernetes.Object,
+            kubernetes: null!,
             Options.Create(new KubernetesOperatorOptions
             {
                 ManagedClassName = "public",
@@ -140,6 +77,7 @@ public sealed class TunnelPublicHostnameMappingTests
             {
                 OwnershipTag = "promethix-cloudflare-tunnel-operator",
             }),
+            new AcceptingIngressTargetValidator(),
             NullLogger<KubernetesTunnelPublicHostnameClient>.Instance);
 
         var resource = new TunnelPublicHostnameCustomResource
@@ -177,5 +115,16 @@ public sealed class TunnelPublicHostnameMappingTests
         invalidIntent.Should().BeNull();
         managedIntent.Should().NotBeNull();
         managedIntent!.Route.OriginService.Should().Be(new Uri("https://traefik-cloudflare-tunnel.edge-system.svc.cluster.local:443"));
+    }
+
+    private sealed class AcceptingIngressTargetValidator : IIngressTargetValidator
+    {
+        public Task ValidateAsync(
+            TunnelPublicHostnameCustomResource resource,
+            TunnelIngressTargetSpec ingress,
+            CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
     }
 }
