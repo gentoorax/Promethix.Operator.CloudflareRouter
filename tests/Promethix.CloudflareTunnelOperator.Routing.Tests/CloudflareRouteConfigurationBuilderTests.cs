@@ -97,7 +97,7 @@ public sealed class CloudflareRouteConfigurationBuilderTests
             OwnershipTag);
 
         var route = rebuilt.Ingress.Single(rule => rule.Hostname == "whoami.promethix.net");
-        route.Service.Should().Be("https://traefik-cloudflare-tunnel.traefik-cloudflare-tunnel.svc.cluster.local:443");
+        route.Service.Should().Be("https://traefik-cloudflare-tunnel.traefik-cloudflare-tunnel.svc.cluster.local");
         route.OriginRequest.Should().NotBeNull();
         route.OriginRequest!.OriginServerName.Should().Be("whoami.promethix.net");
     }
@@ -135,7 +135,7 @@ public sealed class CloudflareRouteConfigurationBuilderTests
             OwnershipTag);
 
         var route = rebuilt.Ingress.Single(rule => rule.Hostname == "whoami.promethix.net");
-        route.Service.Should().Be("http://traefik-cloudflare-tunnel.traefik-cloudflare-tunnel.svc.cluster.local:80");
+        route.Service.Should().Be("http://traefik-cloudflare-tunnel.traefik-cloudflare-tunnel.svc.cluster.local");
         route.OriginRequest.Should().BeNull();
     }
 }
