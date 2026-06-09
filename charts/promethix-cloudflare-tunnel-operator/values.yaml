@@ -1,6 +1,9 @@
 replicaCount: 1
 
 image:
+  # Published image locations include:
+  # - harbor.internal.promethix.net/promethix/cloudflare-tunnel-operator:<tag>
+  # - ghcr.io/gentoorax/cloudflare-tunnel-operator:<tag>
   repository: promethix/cloudflare-tunnel-operator
   tag: latest
   pullPolicy: IfNotPresent

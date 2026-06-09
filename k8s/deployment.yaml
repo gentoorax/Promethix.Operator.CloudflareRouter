@@ -27,6 +27,9 @@ spec:
       serviceAccountName: promethix-cloudflare-tunnel-operator
       containers:
         - name: operator
+          # Supported published image locations:
+          # - harbor.internal.promethix.net/promethix/cloudflare-tunnel-operator:<tag>
+          # - ghcr.io/gentoorax/cloudflare-tunnel-operator:<tag>
           image: promethix/cloudflare-tunnel-operator:latest
           imagePullPolicy: IfNotPresent
           ports:
