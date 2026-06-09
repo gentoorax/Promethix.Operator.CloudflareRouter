@@ -126,45 +126,29 @@ steps:
         from_secret: harbor_ca_cert
     commands:
       - '. .drone/build.env; if [ -z "$${HARBOR_USERNAME}" ] || [ -z "$${HARBOR_PASSWORD}" ]; then echo "Harbor secrets are missing (harbor_robot_username / harbor_robot_password)"; exit 1; fi; if [ -z "$${HARBOR_CA_CERT}" ]; then echo "Harbor CA secret is missing (harbor_ca_cert)"; exit 1; fi; harborAuth="$(printf "%s:%s" "$${HARBOR_USERNAME}" "$${HARBOR_PASSWORD}" | base64 | tr -d "\n")"; mkdir -p /kaniko/.docker; printf "{\"auths\":{\"harbor.internal.promethix.net\":{\"auth\":\"%s\"}}}" "$${harborAuth}" > /kaniko/.docker/config.json; mkdir -p /kaniko/ssl/certs; printf "%b" "$${HARBOR_CA_CERT}" > /kaniko/ssl/certs/harbor-ca.crt; destinationArgs="--destination $${IMAGE_REPO}:$${STAGING_TAG} --destination $${IMAGE_REPO}:staging-latest"; if [ "$${DIRECT_PRODUCTION_RELEASE}" = "true" ]; then destinationArgs="$${destinationArgs} --destination $${IMAGE_REPO}:$${RELEASE_TAG} --destination $${IMAGE_REPO}:latest"; fi; /kaniko/executor --context "$(pwd)" --dockerfile "$(pwd)/Dockerfile" --registry-certificate harbor.internal.promethix.net=/kaniko/ssl/certs/harbor-ca.crt --build-arg BUILD_MAJOR="$${BUILD_MAJOR}" --build-arg BUILD_MINOR="$${BUILD_MINOR}" --build-arg BUILD_REVISION="$${BUILD_REVISION}" --build-arg BUILD_NUMBER="$${BUILD_NUMBER}" --build-arg BUILD_SEMVER="$${BUILD_SEMVER}" --build-arg BUILD_COMMIT_SHA="$${DRONE_COMMIT_SHA}" --build-arg BUILD_DISPLAY="$${BUILD_DISPLAY}" --build-arg BUILD_DATE="$${BUILD_DATE}" $${destinationArgs}'
-
----
-# Internal mirror pipeline for trusted main branch builds only.
-# Mirrors the canonical GitHub repository back to internal Gitea after a successful push build.
-kind: pipeline
-type: docker
-name: mirror-internal-main
-
-clone:
-  depth: 0
-
-trigger:
-  event:
-    - push
-  ref:
-    - refs/heads/main
-
-steps:
-  - name: mirror-main-to-internal
-    image: alpine/git:2.47.2
+  - name: mirror-to-gitea
+    image: alpine:3.21
+    depends_on:
+      - build-and-push-staging-image
     environment:
-      INTERNAL_GIT_USERNAME:
-        from_secret: internal_git_username
-      INTERNAL_GIT_PASSWORD:
-        from_secret: internal_git_password
-      INTERNAL_GIT_CA_CERT:
-        from_secret: internal_git_ca_cert
+      HOME: /root
+      GITEA_MIRROR_SSH_KEY:
+        from_secret: gitea_mirror_ssh_key
     commands:
-      - 'if [ -z "$${INTERNAL_GIT_USERNAME}" ] || [ -z "$${INTERNAL_GIT_PASSWORD}" ]; then echo "Internal Git secrets are missing (internal_git_username / internal_git_password)"; exit 1; fi'
-      - 'if [ -z "$${INTERNAL_GIT_CA_CERT}" ]; then echo "Internal Git CA secret is missing (internal_git_ca_cert)"; exit 1; fi'
-      - 'mkdir -p /tmp/internal-git-certs'
-      - 'printf "%b" "$${INTERNAL_GIT_CA_CERT}" > /tmp/internal-git-certs/ca.crt'
-      - 'git config --global http.sslCAInfo /tmp/internal-git-certs/ca.crt'
-      - 'git remote add internal-mirror "https://$${INTERNAL_GIT_USERNAME}:$${INTERNAL_GIT_PASSWORD}@gitea.internal.promethix.net/chris/Promethix.Operator.CloudflareRouter.git"'
-      - 'git push internal-mirror HEAD:refs/heads/main'
+      - 'if [ -z "$${GITEA_MIRROR_SSH_KEY}" ]; then echo "Gitea mirror SSH key secret is missing (gitea_mirror_ssh_key)"; exit 1; fi'
+      - 'apk add --no-cache git openssh-client'
+      - 'mkdir -p /root/.ssh'
+      - 'printf "%s" "$${GITEA_MIRROR_SSH_KEY}" | tr -d "\r\n " | base64 -d > /root/.ssh/id_ed25519'
+      - 'chmod 600 /root/.ssh/id_ed25519'
+      - 'ssh-keygen -y -f /root/.ssh/id_ed25519 > /dev/null || { echo "Invalid Gitea mirror SSH private key format"; exit 1; }'
+      - 'git fetch --prune --tags origin'
+      - 'git remote remove gitea-mirror || true'
+      - 'git remote add gitea-mirror ssh://git@gitea-ssh-clusterip.gitea.svc.cluster.local:22/chris/Promethix.Operator.CloudflareRouter.git'
+      - 'GIT_SSH_COMMAND="ssh -i /root/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" git push gitea-mirror HEAD:refs/heads/main'
 
 ---
-# Internal mirror pipeline for trusted tag builds only.
-# Public pull request refs are intentionally excluded.
+# Internal tag mirror pipeline.
+# Mirrors trusted release tags back to internal Gitea over SSH.
 kind: pipeline
 type: docker
 name: mirror-internal-tag
@@ -177,24 +161,24 @@ trigger:
     - tag
 
 steps:
-  - name: mirror-tag-to-internal
-    image: alpine/git:2.47.2
+  - name: mirror-tag-to-gitea
+    image: alpine:3.21
     environment:
-      INTERNAL_GIT_USERNAME:
-        from_secret: internal_git_username
-      INTERNAL_GIT_PASSWORD:
-        from_secret: internal_git_password
-      INTERNAL_GIT_CA_CERT:
-        from_secret: internal_git_ca_cert
+      HOME: /root
+      GITEA_MIRROR_SSH_KEY:
+        from_secret: gitea_mirror_ssh_key
     commands:
-      - 'if [ -z "$${INTERNAL_GIT_USERNAME}" ] || [ -z "$${INTERNAL_GIT_PASSWORD}" ]; then echo "Internal Git secrets are missing (internal_git_username / internal_git_password)"; exit 1; fi'
-      - 'if [ -z "$${INTERNAL_GIT_CA_CERT}" ]; then echo "Internal Git CA secret is missing (internal_git_ca_cert)"; exit 1; fi'
+      - 'if [ -z "$${GITEA_MIRROR_SSH_KEY}" ]; then echo "Gitea mirror SSH key secret is missing (gitea_mirror_ssh_key)"; exit 1; fi'
       - 'if [ -z "$${DRONE_TAG}" ]; then echo "DRONE_TAG is empty"; exit 1; fi'
-      - 'mkdir -p /tmp/internal-git-certs'
-      - 'printf "%b" "$${INTERNAL_GIT_CA_CERT}" > /tmp/internal-git-certs/ca.crt'
-      - 'git config --global http.sslCAInfo /tmp/internal-git-certs/ca.crt'
-      - 'git remote add internal-mirror "https://$${INTERNAL_GIT_USERNAME}:$${INTERNAL_GIT_PASSWORD}@gitea.internal.promethix.net/chris/Promethix.Operator.CloudflareRouter.git"'
-      - 'git push internal-mirror "refs/tags/$${DRONE_TAG}:refs/tags/$${DRONE_TAG}"'
+      - 'apk add --no-cache git openssh-client'
+      - 'mkdir -p /root/.ssh'
+      - 'printf "%s" "$${GITEA_MIRROR_SSH_KEY}" | tr -d "\r\n " | base64 -d > /root/.ssh/id_ed25519'
+      - 'chmod 600 /root/.ssh/id_ed25519'
+      - 'ssh-keygen -y -f /root/.ssh/id_ed25519 > /dev/null || { echo "Invalid Gitea mirror SSH private key format"; exit 1; }'
+      - 'git fetch --prune --tags origin'
+      - 'git remote remove gitea-mirror || true'
+      - 'git remote add gitea-mirror ssh://git@gitea-ssh-clusterip.gitea.svc.cluster.local:22/chris/Promethix.Operator.CloudflareRouter.git'
+      - 'GIT_SSH_COMMAND="ssh -i /root/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" git push gitea-mirror "refs/tags/$${DRONE_TAG}:refs/tags/$${DRONE_TAG}"'
 
 ---
 # Production promotion pipeline.
