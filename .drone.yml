@@ -60,8 +60,8 @@ trigger:
   event:
     - push
     - custom
-  branch:
-    - main
+  ref:
+    - refs/heads/main
 
 steps:
   - name: calculate-build-metadata
