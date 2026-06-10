@@ -13,7 +13,7 @@ ARG BUILD_DATE=unknown
 COPY . .
 RUN dotnet publish src/Bootstrap/Promethix.CloudflareTunnelOperator.Hosting/Promethix.CloudflareTunnelOperator.Hosting.csproj -c Release -o /app/publish /p:UseAppHost=false
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled
 WORKDIR /app
 
 ARG BUILD_MAJOR=0
