@@ -156,7 +156,8 @@ public sealed class TunnelPublicHostnameMappingTests
 
         _ = invalidIntent.Should().BeNull();
         _ = managedIntent.Should().NotBeNull();
-        _ = managedIntent!.Route.OriginService.Should().Be(new Uri("https://api.demo.svc.cluster.local:8443"));
+        Assert.NotNull(managedIntent);
+        _ = managedIntent.Route.OriginService.Should().Be(new Uri("https://api.demo.svc.cluster.local:8443"));
     }
 
     [Fact]
@@ -191,7 +192,8 @@ public sealed class TunnelPublicHostnameMappingTests
 
         _ = invalidIntent.Should().BeNull();
         _ = managedIntent.Should().NotBeNull();
-        _ = managedIntent!.Route.OriginService.Should().Be(new Uri("https://api.demo.svc.cluster.local:8443"));
+        Assert.NotNull(managedIntent);
+        _ = managedIntent.Route.OriginService.Should().Be(new Uri("https://api.demo.svc.cluster.local:8443"));
     }
 
     private sealed class AcceptingIngressTargetValidator : IIngressTargetValidator
