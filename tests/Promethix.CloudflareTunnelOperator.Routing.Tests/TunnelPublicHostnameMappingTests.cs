@@ -119,6 +119,81 @@ public sealed class TunnelPublicHostnameMappingTests
         _ = managedIntent.Route.OriginServerName.Should().Be("whoami.delta.promethix.net");
     }
 
+    [Fact]
+    public async Task DirectTargetCanUseServiceReference()
+    {
+        var client = CreateClient();
+        var resource = new TunnelPublicHostnameCustomResource
+        {
+            Metadata = new k8s.Models.V1ObjectMeta
+            {
+                Name = "api-direct",
+                NamespaceProperty = "demo",
+            },
+            Spec = new TunnelPublicHostnameSpec
+            {
+                ClassName = "public",
+                Hostname = "api.delta.promethix.net",
+                TunnelRef = new TunnelReferenceSpec { Name = "delta-public" },
+                Target = new TunnelTargetSpec
+                {
+                    Mode = "direct",
+                    Direct = new TunnelDirectTargetSpec
+                    {
+                        Service = new TunnelIngressServiceTargetSpec
+                        {
+                            Name = "api",
+                            Namespace = "demo",
+                            Port = 8443,
+                            Scheme = "https",
+                        },
+                    },
+                },
+            },
+        };
+
+        var (managedIntent, invalidIntent) = await client.TryBuildIntentAsync(resource, CancellationToken.None);
+
+        _ = invalidIntent.Should().BeNull();
+        _ = managedIntent.Should().NotBeNull();
+        _ = managedIntent!.Route.OriginService.Should().Be(new Uri("https://api.demo.svc.cluster.local:8443"));
+    }
+
+    [Fact]
+    public async Task DirectTargetKeepsUrlProtocolCompatibility()
+    {
+        var client = CreateClient();
+        var resource = new TunnelPublicHostnameCustomResource
+        {
+            Metadata = new k8s.Models.V1ObjectMeta
+            {
+                Name = "api-direct",
+                NamespaceProperty = "demo",
+            },
+            Spec = new TunnelPublicHostnameSpec
+            {
+                ClassName = "public",
+                Hostname = "api.delta.promethix.net",
+                TunnelRef = new TunnelReferenceSpec { Name = "delta-public" },
+                Target = new TunnelTargetSpec
+                {
+                    Mode = "direct",
+                    Direct = new TunnelDirectTargetSpec
+                    {
+                        Protocol = "https",
+                        Url = new Uri("https://api.demo.svc.cluster.local:8443"),
+                    },
+                },
+            },
+        };
+
+        var (managedIntent, invalidIntent) = await client.TryBuildIntentAsync(resource, CancellationToken.None);
+
+        _ = invalidIntent.Should().BeNull();
+        _ = managedIntent.Should().NotBeNull();
+        _ = managedIntent!.Route.OriginService.Should().Be(new Uri("https://api.demo.svc.cluster.local:8443"));
+    }
+
     private sealed class AcceptingIngressTargetValidator : IIngressTargetValidator
     {
         public Task ValidateAsync(
@@ -128,5 +203,27 @@ public sealed class TunnelPublicHostnameMappingTests
         {
             return Task.CompletedTask;
         }
+    }
+
+    private static KubernetesTunnelPublicHostnameClient CreateClient()
+    {
+        return new KubernetesTunnelPublicHostnameClient(
+            kubernetes: null!,
+            Options.Create(new KubernetesOperatorOptions
+            {
+                ManagedClassName = "public",
+                ManagedTunnelName = "delta-public",
+                ManagedIngressClassName = "traefik-cloudflare-tunnel",
+                IngressTargetUrl = new Uri("https://default.edge-system.svc.cluster.local"),
+                ManagedFinalizerName = "edge.promethix.net/tunnelpublichostname-protection",
+                OwnershipConfigMapNamespace = "edge-system",
+                OwnershipConfigMapName = "promethix-cloudflare-tunnel-operator-ownership",
+            }),
+            Options.Create(new RoutingOperatorOptions
+            {
+                OwnershipTag = "promethix-cloudflare-tunnel-operator",
+            }),
+            new AcceptingIngressTargetValidator(),
+            NullLogger<KubernetesTunnelPublicHostnameClient>.Instance);
     }
 }

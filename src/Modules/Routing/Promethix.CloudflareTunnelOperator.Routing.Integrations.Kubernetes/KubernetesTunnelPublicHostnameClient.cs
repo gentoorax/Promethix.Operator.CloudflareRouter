@@ -326,6 +326,21 @@ public sealed class KubernetesTunnelPublicHostnameClient(
         var direct = target.Direct
             ?? throw new InvalidOperationException("spec.target.direct is required when spec.target.mode=direct.");
 
+        if (direct.Service is not null)
+        {
+            var targetUrl = ResolveServiceTargetUrl(direct.Service, "spec.target.direct.service");
+            var serviceProtocol = string.Equals(targetUrl.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+                ? RouteProtocol.Https
+                : RouteProtocol.Http;
+
+            return PublicHostnameRoute.Create(resource.Spec.Hostname, targetUrl, serviceProtocol, ownershipTag);
+        }
+
+        if (direct.Url is null)
+        {
+            throw new InvalidOperationException("spec.target.direct.url is required when spec.target.direct.service is not supplied.");
+        }
+
         var protocol = ParseProtocol(direct.Protocol);
         return PublicHostnameRoute.Create(resource.Spec.Hostname, direct.Url, protocol, ownershipTag);
     }
@@ -343,30 +358,32 @@ public sealed class KubernetesTunnelPublicHostnameClient(
 
     private Uri ResolveIngressTargetUrl(TunnelIngressTargetSpec ingress)
     {
-        if (ingress.Service is null)
+        return ingress.Service is null
+            ? options.Value.IngressTargetUrl
+            : ResolveServiceTargetUrl(ingress.Service, "spec.target.ingress.service");
+    }
+
+    private static Uri ResolveServiceTargetUrl(TunnelIngressServiceTargetSpec service, string fieldPath)
+    {
+        if (string.IsNullOrWhiteSpace(service.Name))
         {
-            return options.Value.IngressTargetUrl;
+            throw new InvalidOperationException($"{fieldPath}.name is required when {fieldPath} is supplied.");
         }
 
-        if (string.IsNullOrWhiteSpace(ingress.Service.Name))
+        if (string.IsNullOrWhiteSpace(service.Namespace))
         {
-            throw new InvalidOperationException("spec.target.ingress.service.name is required when spec.target.ingress.service is supplied.");
+            throw new InvalidOperationException($"{fieldPath}.namespace is required when {fieldPath} is supplied.");
         }
 
-        if (string.IsNullOrWhiteSpace(ingress.Service.Namespace))
+        if (service.Port <= 0)
         {
-            throw new InvalidOperationException("spec.target.ingress.service.namespace is required when spec.target.ingress.service is supplied.");
+            throw new InvalidOperationException($"{fieldPath}.port must be greater than zero when {fieldPath} is supplied.");
         }
 
-        if (ingress.Service.Port <= 0)
-        {
-            throw new InvalidOperationException("spec.target.ingress.service.port must be greater than zero when spec.target.ingress.service is supplied.");
-        }
-
-        var scheme = ingress.Service.Scheme?.Trim();
+        var scheme = service.Scheme?.Trim();
         return !string.Equals(scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
             && !string.Equals(scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
-            ? throw new InvalidOperationException("spec.target.ingress.service.scheme must be http or https when spec.target.ingress.service is supplied.")
-            : new Uri($"{scheme}://{ingress.Service.Name}.{ingress.Service.Namespace}.svc.cluster.local:{ingress.Service.Port}");
+            ? throw new InvalidOperationException($"{fieldPath}.scheme must be http or https when {fieldPath} is supplied.")
+            : new Uri($"{scheme}://{service.Name}.{service.Namespace}.svc.cluster.local:{service.Port}");
     }
 }

@@ -46,7 +46,10 @@ spec:
   target:
     mode: direct
     direct:
-      protocol: https
-      url: https://api.demo.svc.cluster.local:8443
+      service:
+        name: api
+        namespace: demo
+        port: 8443
+        scheme: https
   cloudflare:
     proxied: true

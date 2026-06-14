@@ -65,13 +65,26 @@ spec:
                               enum: ["http", "https"]
                     direct:
                       type: object
-                      required: ["url", "protocol"]
                       properties:
                         url:
                           type: string
                         protocol:
                           type: string
                           enum: ["http", "https"]
+                        service:
+                          type: object
+                          required: ["name", "namespace", "port", "scheme"]
+                          properties:
+                            name:
+                              type: string
+                            namespace:
+                              type: string
+                            port:
+                              type: integer
+                              minimum: 1
+                            scheme:
+                              type: string
+                              enum: ["http", "https"]
                 origin:
                   type: object
                   required: ["url", "protocol"]
