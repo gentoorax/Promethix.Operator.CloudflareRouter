@@ -1,19 +1,19 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: edge-system
+  name: cloudflare-tunnel-operator-system
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: promethix-cloudflare-tunnel-operator
-  namespace: edge-system
+  namespace: cloudflare-tunnel-operator-system
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: promethix-cloudflare-tunnel-operator
-  namespace: edge-system
+  namespace: cloudflare-tunnel-operator-system
 spec:
   replicas: 1
   selector:
@@ -28,9 +28,8 @@ spec:
       containers:
         - name: operator
           # Supported published image locations:
-          # - harbor.internal.promethix.net/promethix/cloudflare-tunnel-operator:<tag>
           # - ghcr.io/gentoorax/cloudflare-tunnel-operator:<tag>
-          image: promethix/cloudflare-tunnel-operator:latest
+          image: ghcr.io/gentoorax/cloudflare-tunnel-operator:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
@@ -50,15 +49,15 @@ spec:
             - name: KubernetesOperator__ManagedClassName
               value: public
             - name: KubernetesOperator__ManagedTunnelName
-              value: delta-public
+              value: public-tunnel
             - name: KubernetesOperator__ManagedIngressClassName
               value: traefik-cloudflare-tunnel
             - name: KubernetesOperator__IngressTargetUrl
-              value: https://traefik-cloudflare-tunnel.edge-system.svc.cluster.local
+              value: https://traefik-cloudflare-tunnel.traefik.svc.cluster.local
             - name: KubernetesOperator__ManagedFinalizerName
               value: edge.promethix.net/tunnelpublichostname-protection
             - name: KubernetesOperator__OwnershipConfigMapNamespace
-              value: edge-system
+              value: cloudflare-tunnel-operator-system
             - name: KubernetesOperator__OwnershipConfigMapName
               value: promethix-cloudflare-tunnel-operator-ownership
             - name: RoutingOperator__ApplyChanges

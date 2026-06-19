@@ -38,18 +38,17 @@ metadata:
   name: whoami
   namespace: demo
   annotations:
-    external-dns.alpha.kubernetes.io/hostname: whoami.delta.promethix.net
+    external-dns.alpha.kubernetes.io/hostname: whoami.example.com
     cert-manager.io/cluster-issuer: letsencrypt-production
     traefik.ingress.kubernetes.io/router.entrypoints: websecure
-    traefik.ingress.kubernetes.io/router.middlewares: edge-system-forward-auth@kubernetescrd
 spec:
   ingressClassName: traefik-cloudflare-tunnel
   tls:
     - hosts:
-        - whoami.delta.promethix.net
-      secretName: whoami-delta-promethix-net-tls
+        - whoami.example.com
+      secretName: whoami-example-com-tls
   rules:
-    - host: whoami.delta.promethix.net
+    - host: whoami.example.com
       http:
         paths:
           - path: /
@@ -67,20 +66,20 @@ metadata:
   namespace: demo
 spec:
   className: public
-  hostname: whoami.delta.promethix.net
+  hostname: whoami.example.com
   enabled: true
   tunnelRef:
-    name: delta-public
+    name: public-tunnel
   target:
     mode: ingress
     ingress:
       className: traefik-cloudflare-tunnel
       service:
         name: traefik-cloudflare-tunnel
-        namespace: edge-system
+        namespace: traefik
         port: 443
         scheme: https
-      # The operator will emit originRequest.originServerName=whoami.delta.promethix.net
+      # The operator will emit originRequest.originServerName=whoami.example.com
       # so cloudflared verifies the Traefik certificate against the public hostname.
   cloudflare:
     proxied: true

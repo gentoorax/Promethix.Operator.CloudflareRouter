@@ -1,0 +1,28 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: cloudflare-tunnel-operator
+  namespace: cloudflare-tunnel-operator-system
+spec:
+  interval: 10m
+  chart:
+    spec:
+      chart: ./charts/promethix-cloudflare-tunnel-operator
+      sourceRef:
+        kind: GitRepository
+        name: cloudflare-tunnel-operator
+        namespace: flux-system
+  values:
+    image:
+      repository: ghcr.io/gentoorax/cloudflare-tunnel-operator
+      tag: latest
+    namespaceOverride: cloudflare-tunnel-operator-system
+    cloudflare:
+      existingSecretName: cloudflare-tunnel-operator
+    operator:
+      managedClassName: public
+      managedTunnelName: public-tunnel
+      managedIngressClassName: traefik-cloudflare-tunnel
+      ingressTargetUrl: https://traefik-cloudflare-tunnel.traefik.svc.cluster.local
+      ownershipConfigMapNamespace: cloudflare-tunnel-operator-system
+      applyChanges: false

@@ -1,0 +1,10 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: cloudflare-tunnel-operator
+  namespace: flux-system
+spec:
+  interval: 10m
+  url: https://github.com/gentoorax/Promethix.Operator.CloudflareRouter.git
+  ref:
+    branch: main

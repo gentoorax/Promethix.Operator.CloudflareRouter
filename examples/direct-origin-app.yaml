@@ -39,10 +39,10 @@ metadata:
   namespace: demo
 spec:
   className: public
-  hostname: api.delta.promethix.net
+  hostname: api.example.com
   enabled: true
   tunnelRef:
-    name: delta-public
+    name: public-tunnel
   target:
     mode: direct
     direct:

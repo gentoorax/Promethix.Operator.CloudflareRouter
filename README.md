@@ -48,6 +48,41 @@ Example manifests are in [examples](examples):
 
 - [ingress-backed-app.yaml](examples/ingress-backed-app.yaml)
 - [direct-origin-app.yaml](examples/direct-origin-app.yaml)
+- [flux](examples/flux)
+
+The Flux example is intentionally generic and uses placeholder secrets. Replace values for your cluster, tunnel, and ingress controller.
+
+## Manual Helm Deployment
+
+Create a namespace and a Secret containing Cloudflare credentials:
+
+```powershell
+kubectl create namespace cloudflare-tunnel-operator-system
+
+kubectl create secret generic cloudflare-tunnel-operator `
+  --namespace cloudflare-tunnel-operator-system `
+  --from-literal=CLOUDFLARE_API_TOKEN=replace-me `
+  --from-literal=CLOUDFLARE_ACCOUNT_ID=replace-me `
+  --from-literal=CLOUDFLARE_TUNNEL_ID=replace-me
+```
+
+Install from a local checkout:
+
+```powershell
+helm upgrade --install cloudflare-tunnel-operator `
+  ./charts/promethix-cloudflare-tunnel-operator `
+  --namespace cloudflare-tunnel-operator-system `
+  --set image.repository=ghcr.io/gentoorax/cloudflare-tunnel-operator `
+  --set image.tag=latest `
+  --set cloudflare.existingSecretName=cloudflare-tunnel-operator `
+  --set operator.managedTunnelName=public-tunnel `
+  --set operator.ingressTargetUrl=https://traefik-cloudflare-tunnel.traefik.svc.cluster.local `
+  --set operator.applyChanges=false
+```
+
+Keep `operator.applyChanges=false` for the first run. The operator will plan reconciliation and update CRD status without writing Cloudflare tunnel config. Set it to `true` only after validating logs, status, and ownership behavior.
+
+For GitOps deployments, use the sample manifests in [examples/flux](examples/flux) as a starting point.
 
 ## Development
 

@@ -1,11 +1,11 @@
 replicaCount: 1
 
 image:
-  repository: promethix/cloudflare-tunnel-operator
+  repository: ghcr.io/gentoorax/cloudflare-tunnel-operator
   tag: latest
   pullPolicy: IfNotPresent
 
-namespaceOverride: edge-system
+namespaceOverride: cloudflare-tunnel-operator-system
 
 serviceAccount:
   create: true
@@ -19,12 +19,12 @@ cloudflare:
 
 operator:
   managedClassName: public
-  managedTunnelName: delta-public
+  managedTunnelName: public-tunnel
   managedIngressClassName: traefik-cloudflare-tunnel
-  ingressTargetUrl: https://traefik-cloudflare-tunnel.edge-system.svc.cluster.local
+  ingressTargetUrl: https://traefik-cloudflare-tunnel.traefik.svc.cluster.local
   managedFinalizerName: edge.promethix.net/tunnelpublichostname-protection
   ownershipTag: promethix-cloudflare-tunnel-operator
-  ownershipConfigMapNamespace: edge-system
+  ownershipConfigMapNamespace: cloudflare-tunnel-operator-system
   ownershipConfigMapName: promethix-cloudflare-tunnel-operator-ownership
   applyChanges: false
   reconciliationIntervalSeconds: 30
