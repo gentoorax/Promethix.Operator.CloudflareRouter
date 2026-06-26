@@ -1,3 +1,15 @@
 apiVersion: v1
-entries: {}
-generated: "2026-06-20T00:00:00Z"
+entries:
+  promethix-cloudflare-tunnel-operator:
+  - apiVersion: v2
+    appVersion: 1.0.36
+    created: "2026-06-26T18:18:25.03354723Z"
+    description: Reconciles TunnelPublicHostname intent into a remotely managed Cloudflare
+      Tunnel.
+    digest: 70103c937b0017f08282fa91928a93a2ebf49e88aeabd982744e695fdb925e23
+    name: promethix-cloudflare-tunnel-operator
+    type: application
+    urls:
+    - https://gentoorax.github.io/Promethix.Operator.CloudflareRouter/promethix-cloudflare-tunnel-operator-1.0.36.tgz
+    version: 1.0.36
+generated: "2026-06-26T18:18:25.032372201Z"
