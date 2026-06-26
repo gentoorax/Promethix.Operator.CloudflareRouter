@@ -1,6 +1,6 @@
 # Promethix Cloudflare Tunnel Operator
 
-[![Build Status](https://drone.promethix.net/api/badges/gentoorax/Promethix.Operator.CloudflareRouter/status.svg)](https://drone.promethix.net/gentoorax/Promethix.Operator.CloudflareRouter)
+[![Build Status](https://drone.promethix.net/api/badges/PromethixLabs/Promethix.Operator.CloudflareRouter/status.svg)](https://drone.promethix.net/PromethixLabs/Promethix.Operator.CloudflareRouter)
 
 Promethix Cloudflare Tunnel Operator is a Kubernetes operator for publishing cluster services through an existing Cloudflare Tunnel.
 
@@ -82,7 +82,7 @@ helm upgrade --install cloudflare-tunnel-operator `
   promethix/promethix-cloudflare-tunnel-operator `
   --namespace cloudflare-tunnel-operator-system `
   --create-namespace `
-  --set image.repository=ghcr.io/gentoorax/cloudflare-tunnel-operator `
+  --set image.repository=ghcr.io/promethixlabs/cloudflare-tunnel-operator `
   --set image.tag=latest `
   --set cloudflare.existingSecretName=cloudflare-tunnel-operator `
   --set operator.managedTunnelName=public-tunnel `

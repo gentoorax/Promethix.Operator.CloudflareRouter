@@ -28,8 +28,8 @@ spec:
       containers:
         - name: operator
           # Supported published image locations:
-          # - ghcr.io/gentoorax/cloudflare-tunnel-operator:<tag>
-          image: ghcr.io/gentoorax/cloudflare-tunnel-operator:latest
+          # - ghcr.io/promethixlabs/cloudflare-tunnel-operator:<tag>
+          image: ghcr.io/promethixlabs/cloudflare-tunnel-operator:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
