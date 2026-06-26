@@ -413,4 +413,4 @@ steps:
       - 'git config user.name "Drone CI"'
       - 'git config user.email "drone@users.noreply.github.com"'
       - 'git tag -a "$${releaseGitTag}" -m "Release $${RELEASE_TAG}" "$${DRONE_COMMIT_SHA}"'
-      - 'GIT_SSH_COMMAND="ssh -i /root/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" git push origin "refs/tags/$${releaseGitTag}"'
+      - 'GIT_SSH_COMMAND="ssh -i /root/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" git push git@github.com:gentoorax/Promethix.Operator.CloudflareRouter.git "refs/tags/$${releaseGitTag}"'
