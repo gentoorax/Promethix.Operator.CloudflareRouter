@@ -98,7 +98,7 @@ public sealed class TunnelPublicHostnameMappingTests
 
         _ = invalidIntent.Should().BeNull();
         _ = managedIntent.Should().NotBeNull();
-        _ = managedIntent!.Route.OriginService.Should().Be(new Uri("https://traefik-cloudflare-tunnel.edge-system.svc.cluster.local:443"));
+        _ = managedIntent.Route.OriginService.Should().Be(new Uri("https://traefik-cloudflare-tunnel.edge-system.svc.cluster.local:443"));
         _ = managedIntent.Route.OriginServerName.Should().Be("whoami.delta.promethix.net");
     }
 
@@ -112,7 +112,7 @@ public sealed class TunnelPublicHostnameMappingTests
 
         _ = managedIntent.Should().BeNull();
         _ = invalidIntent.Should().NotBeNull();
-        _ = invalidIntent!.Reason.Should().Be("spec.target.ingress.service is not allowed by this operator. Use the configured ingress target or enable KubernetesOperator:AllowIngressServiceOverride.");
+        _ = invalidIntent.Reason.Should().Be("spec.target.ingress.service is not allowed by this operator. Use the configured ingress target or enable KubernetesOperator:AllowIngressServiceOverride.");
     }
 
     [Fact]
@@ -193,7 +193,7 @@ public sealed class TunnelPublicHostnameMappingTests
 
         _ = managedIntent.Should().BeNull();
         _ = invalidIntent.Should().NotBeNull();
-        _ = invalidIntent!.Reason.Should().Be("spec.target.direct.service.namespace must match the TunnelPublicHostname namespace unless cross-namespace direct targets are explicitly enabled.");
+        _ = invalidIntent.Reason.Should().Be("spec.target.direct.service.namespace must match the TunnelPublicHostname namespace unless cross-namespace direct targets are explicitly enabled.");
     }
 
     [Fact]
