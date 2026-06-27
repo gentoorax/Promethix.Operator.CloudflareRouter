@@ -16,7 +16,7 @@ spec:
       serviceAccountName: {{ include "promethix-cloudflare-tunnel-operator.serviceAccountName" . }}
       containers:
         - name: operator
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: CloudflareTunnel__ApiToken

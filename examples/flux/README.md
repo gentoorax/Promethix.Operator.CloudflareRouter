@@ -7,7 +7,7 @@ They are intentionally generic. Replace:
 - Cloudflare account, tunnel, and token values
 - namespace names
 - ingress target service URL
-- image tag
+- image tag, if you want to override the chart `appVersion`
 - chart version range
 
 Files:

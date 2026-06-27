@@ -84,7 +84,6 @@ helm upgrade --install cloudflare-tunnel-operator `
   --namespace cloudflare-tunnel-operator-system `
   --create-namespace `
   --set image.repository=ghcr.io/promethixlabs/cloudflare-tunnel-operator `
-  --set image.tag=latest `
   --set cloudflare.existingSecretName=cloudflare-tunnel-operator `
   --set operator.managedTunnelName=public-tunnel `
   --set operator.ingressTargetUrl=https://traefik-cloudflare-tunnel.traefik.svc.cluster.local `
@@ -92,6 +91,8 @@ helm upgrade --install cloudflare-tunnel-operator `
 ```
 
 Keep `operator.applyChanges=false` for the first run. The operator will plan reconciliation and update CRD status without writing Cloudflare tunnel config. Set it to `true` only after validating logs, status, and ownership behavior.
+
+By default, the chart deploys the image tag matching the chart `appVersion`. Override `image.tag` only when you intentionally want a different image version.
 
 To install from a local checkout instead, replace the chart reference with `./charts/promethix-cloudflare-tunnel-operator`.
 
