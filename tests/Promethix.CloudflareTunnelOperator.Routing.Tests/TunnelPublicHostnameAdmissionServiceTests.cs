@@ -24,7 +24,7 @@ public sealed class TunnelPublicHostnameAdmissionServiceTests
         var response = await service.ValidateAsync(review, CancellationToken.None);
 
         _ = response.Response.Should().NotBeNull();
-        _ = response.Response!.Allowed.Should().BeTrue();
+        _ = response.Response.Allowed.Should().BeTrue();
     }
 
     [Fact]
@@ -37,7 +37,7 @@ public sealed class TunnelPublicHostnameAdmissionServiceTests
         var response = await service.ValidateAsync(review, CancellationToken.None);
 
         _ = response.Response.Should().NotBeNull();
-        _ = response.Response!.Allowed.Should().BeTrue();
+        _ = response.Response.Allowed.Should().BeTrue();
     }
 
     [Fact]
