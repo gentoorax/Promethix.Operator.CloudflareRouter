@@ -47,11 +47,11 @@ steps:
       - dotnet test Promethix.CloudflareTunnelOperator.slnx --configuration Release --no-build --logger "trx;LogFileName=tests.trx"
 
 ---
-# Staging image build pipeline.
-# Builds once on main and publishes staging tags only.
+# Alpha image build pipeline.
+# Builds once on main and publishes prerelease alpha tags only.
 kind: pipeline
 type: docker
-name: image-publish-staging
+name: image-publish-alpha
 
 clone:
   depth: 0
@@ -112,16 +112,16 @@ steps:
     depends_on:
       - test
     commands:
-      - 'mkdir -p .drone; if [ -f .drone/version-prefix.env ]; then . .drone/version-prefix.env; fi; buildMajor="$${VERSION_MAJOR:-1}"; buildMinor="$${VERSION_MINOR:-0}"; buildNumber="$${DRONE_BUILD_NUMBER:-0}"; buildRevision="$${buildNumber}"; buildSemver="$${buildMajor}.$${buildMinor}.$${buildRevision}"; stagingTag="$${buildSemver}-staging.$${buildNumber}"; releaseTag="$${buildSemver}"; shortCommit="$(printf "%.12s" "$${DRONE_COMMIT_SHA}")"; buildDisplay="v$${buildSemver}"; buildDate="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; harborImageRepo="harbor.internal.promethix.net/promethix/cloudflare-tunnel-operator"; ghcrImageRepo="ghcr.io/promethixlabs/cloudflare-tunnel-operator"; legacyGhcrImageRepo="ghcr.io/gentoorax/cloudflare-tunnel-operator"; directProductionRelease="$${DIRECT_PRODUCTION_RELEASE:-false}"; printf "BUILD_MAJOR=%s\nBUILD_MINOR=%s\nBUILD_REVISION=%s\nBUILD_NUMBER=%s\nBUILD_SEMVER=%s\nSTAGING_TAG=%s\nRELEASE_TAG=%s\nSHORT_COMMIT=%s\nBUILD_DISPLAY=%s\nBUILD_DATE=%s\nHARBOR_IMAGE_REPO=%s\nGHCR_IMAGE_REPO=%s\nLEGACY_GHCR_IMAGE_REPO=%s\nDIRECT_PRODUCTION_RELEASE=%s\n" "$${buildMajor}" "$${buildMinor}" "$${buildRevision}" "$${buildNumber}" "$${buildSemver}" "$${stagingTag}" "$${releaseTag}" "$${shortCommit}" "$${buildDisplay}" "$${buildDate}" "$${harborImageRepo}" "$${ghcrImageRepo}" "$${legacyGhcrImageRepo}" "$${directProductionRelease}" > .drone/build.env'
+      - 'mkdir -p .drone; if [ -f .drone/version-prefix.env ]; then . .drone/version-prefix.env; fi; buildMajor="$${VERSION_MAJOR:-1}"; buildMinor="$${VERSION_MINOR:-0}"; buildPatch="$${VERSION_PATCH:-0}"; buildNumber="$${DRONE_BUILD_NUMBER:-0}"; buildRevision="$${buildPatch}"; buildSemver="$${buildMajor}.$${buildMinor}.$${buildPatch}"; shortCommit="$(printf "%.7s" "$${DRONE_COMMIT_SHA}")"; alphaTag="$${buildSemver}-alpha-$${shortCommit}.$${buildNumber}"; releaseTag="$${buildSemver}"; buildDisplay="v$${alphaTag}"; buildDate="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; harborImageRepo="harbor.internal.promethix.net/promethix/cloudflare-tunnel-operator"; ghcrImageRepo="ghcr.io/promethixlabs/cloudflare-tunnel-operator"; legacyGhcrImageRepo="ghcr.io/gentoorax/cloudflare-tunnel-operator"; directProductionRelease="$${DIRECT_PRODUCTION_RELEASE:-false}"; printf "BUILD_MAJOR=%s\nBUILD_MINOR=%s\nBUILD_REVISION=%s\nBUILD_PATCH=%s\nBUILD_NUMBER=%s\nBUILD_SEMVER=%s\nALPHA_TAG=%s\nRELEASE_TAG=%s\nSHORT_COMMIT=%s\nBUILD_DISPLAY=%s\nBUILD_DATE=%s\nHARBOR_IMAGE_REPO=%s\nGHCR_IMAGE_REPO=%s\nLEGACY_GHCR_IMAGE_REPO=%s\nDIRECT_PRODUCTION_RELEASE=%s\n" "$${buildMajor}" "$${buildMinor}" "$${buildRevision}" "$${buildPatch}" "$${buildNumber}" "$${buildSemver}" "$${alphaTag}" "$${releaseTag}" "$${shortCommit}" "$${buildDisplay}" "$${buildDate}" "$${harborImageRepo}" "$${ghcrImageRepo}" "$${legacyGhcrImageRepo}" "$${directProductionRelease}" > .drone/build.env'
 
   - name: announce-build-plan
     image: alpine:3.21
     depends_on:
       - calculate-build-metadata
     commands:
-      - '. .drone/build.env; echo "Planned staging publish:"; echo "  harbor image repo: $${HARBOR_IMAGE_REPO}"; echo "  ghcr image repo: $${GHCR_IMAGE_REPO}"; echo "  legacy ghcr image repo: $${LEGACY_GHCR_IMAGE_REPO}"; echo "  staging release tag: $${STAGING_TAG}"; echo "  staging alias tag: staging-latest"; if [ "$${DIRECT_PRODUCTION_RELEASE}" = "true" ]; then echo "  production release tag: $${RELEASE_TAG}"; echo "  production alias tag: latest"; fi'
+      - '. .drone/build.env; echo "Planned alpha publish:"; echo "  harbor image repo: $${HARBOR_IMAGE_REPO}"; echo "  ghcr image repo: $${GHCR_IMAGE_REPO}"; echo "  legacy ghcr image repo: $${LEGACY_GHCR_IMAGE_REPO}"; echo "  alpha release tag: $${ALPHA_TAG}"; echo "  alpha alias tag: alpha-latest"; if [ "$${DIRECT_PRODUCTION_RELEASE}" = "true" ]; then echo "  production release tag: $${RELEASE_TAG}"; echo "  production alias tag: latest"; fi'
 
-  - name: build-and-push-staging-image
+  - name: build-and-push-alpha-image
     image: gcr.io/kaniko-project/executor:v1.23.2-debug
     depends_on:
       - announce-build-plan
@@ -134,12 +134,12 @@ steps:
       HARBOR_CA_CERT:
         from_secret: harbor_ca_cert
     commands:
-      - '. .drone/build.env; if [ -z "$${HARBOR_USERNAME}" ] || [ -z "$${HARBOR_PASSWORD}" ]; then echo "Harbor secrets are missing (harbor_robot_username / harbor_robot_password)"; exit 1; fi; if [ -z "$${HARBOR_CA_CERT}" ]; then echo "Harbor CA secret is missing (harbor_ca_cert)"; exit 1; fi; harborAuth="$(printf "%s:%s" "$${HARBOR_USERNAME}" "$${HARBOR_PASSWORD}" | base64 | tr -d "\n")"; mkdir -p /kaniko/.docker; printf "{\"auths\":{\"harbor.internal.promethix.net\":{\"auth\":\"%s\"}}}" "$${harborAuth}" > /kaniko/.docker/config.json; mkdir -p /kaniko/ssl/certs; printf "%b" "$${HARBOR_CA_CERT}" > /kaniko/ssl/certs/harbor-ca.crt; destinationArgs="--destination $${HARBOR_IMAGE_REPO}:$${STAGING_TAG} --destination $${HARBOR_IMAGE_REPO}:staging-latest"; if [ "$${DIRECT_PRODUCTION_RELEASE}" = "true" ]; then destinationArgs="$${destinationArgs} --destination $${HARBOR_IMAGE_REPO}:$${RELEASE_TAG} --destination $${HARBOR_IMAGE_REPO}:latest"; fi; /kaniko/executor --context "$(pwd)" --dockerfile "$(pwd)/Dockerfile" --registry-certificate harbor.internal.promethix.net=/kaniko/ssl/certs/harbor-ca.crt --skip-push-permission-check --push-retry 3 --build-arg BUILD_MAJOR="$${BUILD_MAJOR}" --build-arg BUILD_MINOR="$${BUILD_MINOR}" --build-arg BUILD_REVISION="$${BUILD_REVISION}" --build-arg BUILD_NUMBER="$${BUILD_NUMBER}" --build-arg BUILD_SEMVER="$${BUILD_SEMVER}" --build-arg BUILD_COMMIT_SHA="$${DRONE_COMMIT_SHA}" --build-arg BUILD_DISPLAY="$${BUILD_DISPLAY}" --build-arg BUILD_DATE="$${BUILD_DATE}" $${destinationArgs}'
+      - '. .drone/build.env; if [ -z "$${HARBOR_USERNAME}" ] || [ -z "$${HARBOR_PASSWORD}" ]; then echo "Harbor secrets are missing (harbor_robot_username / harbor_robot_password)"; exit 1; fi; if [ -z "$${HARBOR_CA_CERT}" ]; then echo "Harbor CA secret is missing (harbor_ca_cert)"; exit 1; fi; harborAuth="$(printf "%s:%s" "$${HARBOR_USERNAME}" "$${HARBOR_PASSWORD}" | base64 | tr -d "\n")"; mkdir -p /kaniko/.docker; printf "{\"auths\":{\"harbor.internal.promethix.net\":{\"auth\":\"%s\"}}}" "$${harborAuth}" > /kaniko/.docker/config.json; mkdir -p /kaniko/ssl/certs; printf "%b" "$${HARBOR_CA_CERT}" > /kaniko/ssl/certs/harbor-ca.crt; destinationArgs="--destination $${HARBOR_IMAGE_REPO}:$${ALPHA_TAG} --destination $${HARBOR_IMAGE_REPO}:alpha-latest"; if [ "$${DIRECT_PRODUCTION_RELEASE}" = "true" ]; then destinationArgs="$${destinationArgs} --destination $${HARBOR_IMAGE_REPO}:$${RELEASE_TAG} --destination $${HARBOR_IMAGE_REPO}:latest"; fi; /kaniko/executor --context "$(pwd)" --dockerfile "$(pwd)/Dockerfile" --registry-certificate harbor.internal.promethix.net=/kaniko/ssl/certs/harbor-ca.crt --skip-push-permission-check --push-retry 3 --build-arg BUILD_MAJOR="$${BUILD_MAJOR}" --build-arg BUILD_MINOR="$${BUILD_MINOR}" --build-arg BUILD_REVISION="$${BUILD_REVISION}" --build-arg BUILD_NUMBER="$${BUILD_NUMBER}" --build-arg BUILD_SEMVER="$${BUILD_SEMVER}" --build-arg BUILD_COMMIT_SHA="$${DRONE_COMMIT_SHA}" --build-arg BUILD_DISPLAY="$${BUILD_DISPLAY}" --build-arg BUILD_DATE="$${BUILD_DATE}" $${destinationArgs}'
 
-  - name: publish-staging-image-to-ghcr
+  - name: publish-alpha-image-to-ghcr
     image: quay.io/skopeo/stable:latest
     depends_on:
-      - build-and-push-staging-image
+      - build-and-push-alpha-image
     environment:
       HOME: /tmp
       HARBOR_USERNAME:
@@ -153,12 +153,12 @@ steps:
       GHCR_TOKEN:
         from_secret: ghcr_token
     commands:
-      - '. .drone/build.env; if [ -z "$${HARBOR_USERNAME}" ] || [ -z "$${HARBOR_PASSWORD}" ]; then echo "Harbor secrets are missing (harbor_robot_username / harbor_robot_password)"; exit 1; fi; if [ -z "$${HARBOR_CA_CERT}" ]; then echo "Harbor CA secret is missing (harbor_ca_cert)"; exit 1; fi; if [ -z "$${GHCR_USERNAME}" ] || [ -z "$${GHCR_TOKEN}" ]; then echo "GHCR secrets are missing (ghcr_username / ghcr_token)"; exit 1; fi; mkdir -p /tmp/harbor-certs; printf "%b" "$${HARBOR_CA_CERT}" > /tmp/harbor-certs/harbor-ca.crt; for imageRepo in "$${GHCR_IMAGE_REPO}" "$${LEGACY_GHCR_IMAGE_REPO}"; do skopeo copy --src-creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --dest-creds "$${GHCR_USERNAME}:$${GHCR_TOKEN}" --src-cert-dir /tmp/harbor-certs "docker://$${HARBOR_IMAGE_REPO}:$${STAGING_TAG}" "docker://$${imageRepo}:$${STAGING_TAG}"; skopeo copy --src-creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --dest-creds "$${GHCR_USERNAME}:$${GHCR_TOKEN}" --src-cert-dir /tmp/harbor-certs "docker://$${HARBOR_IMAGE_REPO}:staging-latest" "docker://$${imageRepo}:staging-latest"; if [ "$${DIRECT_PRODUCTION_RELEASE}" = "true" ]; then skopeo copy --src-creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --dest-creds "$${GHCR_USERNAME}:$${GHCR_TOKEN}" --src-cert-dir /tmp/harbor-certs "docker://$${HARBOR_IMAGE_REPO}:$${RELEASE_TAG}" "docker://$${imageRepo}:$${RELEASE_TAG}"; skopeo copy --src-creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --dest-creds "$${GHCR_USERNAME}:$${GHCR_TOKEN}" --src-cert-dir /tmp/harbor-certs "docker://$${HARBOR_IMAGE_REPO}:latest" "docker://$${imageRepo}:latest"; fi; done'
+      - '. .drone/build.env; if [ -z "$${HARBOR_USERNAME}" ] || [ -z "$${HARBOR_PASSWORD}" ]; then echo "Harbor secrets are missing (harbor_robot_username / harbor_robot_password)"; exit 1; fi; if [ -z "$${HARBOR_CA_CERT}" ]; then echo "Harbor CA secret is missing (harbor_ca_cert)"; exit 1; fi; if [ -z "$${GHCR_USERNAME}" ] || [ -z "$${GHCR_TOKEN}" ]; then echo "GHCR secrets are missing (ghcr_username / ghcr_token)"; exit 1; fi; mkdir -p /tmp/harbor-certs; printf "%b" "$${HARBOR_CA_CERT}" > /tmp/harbor-certs/harbor-ca.crt; for imageRepo in "$${GHCR_IMAGE_REPO}" "$${LEGACY_GHCR_IMAGE_REPO}"; do skopeo copy --src-creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --dest-creds "$${GHCR_USERNAME}:$${GHCR_TOKEN}" --src-cert-dir /tmp/harbor-certs "docker://$${HARBOR_IMAGE_REPO}:$${ALPHA_TAG}" "docker://$${imageRepo}:$${ALPHA_TAG}"; skopeo copy --src-creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --dest-creds "$${GHCR_USERNAME}:$${GHCR_TOKEN}" --src-cert-dir /tmp/harbor-certs "docker://$${HARBOR_IMAGE_REPO}:alpha-latest" "docker://$${imageRepo}:alpha-latest"; if [ "$${DIRECT_PRODUCTION_RELEASE}" = "true" ]; then skopeo copy --src-creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --dest-creds "$${GHCR_USERNAME}:$${GHCR_TOKEN}" --src-cert-dir /tmp/harbor-certs "docker://$${HARBOR_IMAGE_REPO}:$${RELEASE_TAG}" "docker://$${imageRepo}:$${RELEASE_TAG}"; skopeo copy --src-creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --dest-creds "$${GHCR_USERNAME}:$${GHCR_TOKEN}" --src-cert-dir /tmp/harbor-certs "docker://$${HARBOR_IMAGE_REPO}:latest" "docker://$${imageRepo}:latest"; fi; done'
 
   - name: resolve-published-image-digests
     image: quay.io/skopeo/stable:latest
     depends_on:
-      - publish-staging-image-to-ghcr
+      - publish-alpha-image-to-ghcr
     environment:
       HOME: /tmp
       HARBOR_USERNAME:
@@ -172,7 +172,7 @@ steps:
       GHCR_TOKEN:
         from_secret: ghcr_token
     commands:
-      - '. .drone/build.env; mkdir -p /tmp/harbor-certs; printf "%b" "$${HARBOR_CA_CERT}" > /tmp/harbor-certs/harbor-ca.crt; harborDigest="$(skopeo inspect --format "{{.Digest}}" --creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --cert-dir /tmp/harbor-certs "docker://$${HARBOR_IMAGE_REPO}:$${STAGING_TAG}")"; ghcrDigest="$(skopeo inspect --format "{{.Digest}}" --creds "$${GHCR_USERNAME}:$${GHCR_TOKEN}" "docker://$${GHCR_IMAGE_REPO}:$${STAGING_TAG}")"; printf "HARBOR_IMAGE_DIGEST=%s\nGHCR_IMAGE_DIGEST=%s\nHARBOR_IMAGE_REF=%s@%s\nGHCR_IMAGE_REF=%s@%s\n" "$${harborDigest}" "$${ghcrDigest}" "$${HARBOR_IMAGE_REPO}" "$${harborDigest}" "$${GHCR_IMAGE_REPO}" "$${ghcrDigest}" > .drone/digests.env; echo "Resolved Harbor image: $${HARBOR_IMAGE_REPO}@$${harborDigest}"; echo "Resolved GHCR image: $${GHCR_IMAGE_REPO}@$${ghcrDigest}"'
+      - '. .drone/build.env; mkdir -p /tmp/harbor-certs; printf "%b" "$${HARBOR_CA_CERT}" > /tmp/harbor-certs/harbor-ca.crt; harborDigest="$(skopeo inspect --format "{{.Digest}}" --creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --cert-dir /tmp/harbor-certs "docker://$${HARBOR_IMAGE_REPO}:$${ALPHA_TAG}")"; ghcrDigest="$(skopeo inspect --format "{{.Digest}}" --creds "$${GHCR_USERNAME}:$${GHCR_TOKEN}" "docker://$${GHCR_IMAGE_REPO}:$${ALPHA_TAG}")"; printf "HARBOR_IMAGE_DIGEST=%s\nGHCR_IMAGE_DIGEST=%s\nHARBOR_IMAGE_REF=%s@%s\nGHCR_IMAGE_REF=%s@%s\n" "$${harborDigest}" "$${ghcrDigest}" "$${HARBOR_IMAGE_REPO}" "$${harborDigest}" "$${GHCR_IMAGE_REPO}" "$${ghcrDigest}" > .drone/digests.env; echo "Resolved Harbor image: $${HARBOR_IMAGE_REPO}@$${harborDigest}"; echo "Resolved GHCR image: $${GHCR_IMAGE_REPO}@$${ghcrDigest}"'
 
   - name: generate-provenance
     image: alpine:3.21
@@ -180,7 +180,7 @@ steps:
       - resolve-published-image-digests
     commands:
       - 'apk add --no-cache jq'
-      - '. .drone/build.env; . .drone/digests.env; mkdir -p .drone/attestations; jq -n --arg repo "$${DRONE_REPO}" --arg commit "$${DRONE_COMMIT_SHA}" --arg version "$${STAGING_TAG}" --arg buildNumber "$${DRONE_BUILD_NUMBER}" --arg buildUrl "$${DRONE_BUILD_LINK}" --arg workflow "$${DRONE_STAGE_NAME:-image-publish-staging}" --arg builder "drone.promethix.net/$${DRONE_REPO}" --arg image "$${HARBOR_IMAGE_REPO}" --arg digest "$${HARBOR_IMAGE_DIGEST}" "{builder:{id:\$builder},buildType:\"https://drone.io/pipeline\",invocation:{configSource:{uri:(\"git+https://github.com/\" + \$repo),digest:{sha1:\$commit},entryPoint:\$workflow},parameters:{repository:\$repo,commit:\$commit,version:\$version,droneBuildNumber:\$buildNumber,droneBuildUrl:\$buildUrl,pipeline:\$workflow,imageDigest:\$digest}},metadata:{buildInvocationId:\$buildNumber,completeness:{parameters:true,environment:false,materials:true},reproducible:false},materials:[{uri:(\"git+https://github.com/\" + \$repo),digest:{sha1:\$commit}},{uri:(\"pkg:docker/\" + \$image),digest:{sha256:(\$digest | sub(\"^sha256:\"; \"\"))}}]}" > .drone/attestations/provenance.slsa.json'
+      - '. .drone/build.env; . .drone/digests.env; mkdir -p .drone/attestations; jq -n --arg repo "$${DRONE_REPO}" --arg commit "$${DRONE_COMMIT_SHA}" --arg version "$${ALPHA_TAG}" --arg buildNumber "$${DRONE_BUILD_NUMBER}" --arg buildUrl "$${DRONE_BUILD_LINK}" --arg workflow "$${DRONE_STAGE_NAME:-image-publish-alpha}" --arg builder "drone.promethix.net/$${DRONE_REPO}" --arg image "$${HARBOR_IMAGE_REPO}" --arg digest "$${HARBOR_IMAGE_DIGEST}" "{builder:{id:\$builder},buildType:\"https://drone.io/pipeline\",invocation:{configSource:{uri:(\"git+https://github.com/\" + \$repo),digest:{sha1:\$commit},entryPoint:\$workflow},parameters:{repository:\$repo,commit:\$commit,version:\$version,droneBuildNumber:\$buildNumber,droneBuildUrl:\$buildUrl,pipeline:\$workflow,imageDigest:\$digest}},metadata:{buildInvocationId:\$buildNumber,completeness:{parameters:true,environment:false,materials:true},reproducible:false},materials:[{uri:(\"git+https://github.com/\" + \$repo),digest:{sha1:\$commit}},{uri:(\"pkg:docker/\" + \$image),digest:{sha256:(\$digest | sub(\"^sha256:\"; \"\"))}}]}" > .drone/attestations/provenance.slsa.json'
 
   - name: generate-sbom
     image: alpine:3.21
@@ -331,7 +331,7 @@ steps:
 
 ---
 # Production promotion pipeline.
-# Retags an existing staging image to live production aliases without rebuilding it.
+# Retags an existing alpha image to live production aliases without rebuilding it.
 kind: pipeline
 type: docker
 name: promote-production
@@ -354,7 +354,7 @@ steps:
       HARBOR_CA_CERT:
         from_secret: harbor_ca_cert
     commands:
-      - 'mkdir -p .drone; if [ -z "$${HARBOR_USERNAME}" ] || [ -z "$${HARBOR_PASSWORD}" ]; then echo "Harbor secrets are missing (harbor_robot_username / harbor_robot_password)"; exit 1; fi; if [ -z "$${HARBOR_CA_CERT}" ]; then echo "Harbor CA secret is missing (harbor_ca_cert)"; exit 1; fi; mkdir -p /tmp/harbor-certs; printf "%b" "$${HARBOR_CA_CERT}" > /tmp/harbor-certs/harbor-ca.crt; harborImageRepo="harbor.internal.promethix.net/promethix/cloudflare-tunnel-operator"; ghcrImageRepo="ghcr.io/promethixlabs/cloudflare-tunnel-operator"; legacyGhcrImageRepo="ghcr.io/gentoorax/cloudflare-tunnel-operator"; sourceTag="$${SOURCE_IMAGE_TAG:-staging-latest}"; configJson="$(skopeo inspect --config --creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --cert-dir /tmp/harbor-certs "docker://$${harborImageRepo}:$${sourceTag}")"; buildSemver="$(printf "%s" "$${configJson}" | grep -o "\"org.opencontainers.image.version\":[[:space:]]*\"[^\"]*\"" | head -n 1 | sed "s/^\"org.opencontainers.image.version\":[[:space:]]*\"//; s/\"$//")"; buildNumber="$(printf "%s" "$${configJson}" | grep -o "\"org.promethix.build.number\":[[:space:]]*\"[^\"]*\"" | head -n 1 | sed "s/^\"org.promethix.build.number\":[[:space:]]*\"//; s/\"$//")"; if [ -z "$${buildSemver}" ] || [ -z "$${buildNumber}" ]; then echo "Unable to resolve image metadata from $${harborImageRepo}:$${sourceTag}"; echo "$${configJson}"; exit 1; fi; versionMajor="$(printf "%s" "$${buildSemver}" | cut -d. -f1)"; versionMinor="$(printf "%s" "$${buildSemver}" | cut -d. -f2)"; releaseTag="$${versionMajor}.$${versionMinor}.$${buildNumber}"; printf "HARBOR_IMAGE_REPO=%s\nGHCR_IMAGE_REPO=%s\nLEGACY_GHCR_IMAGE_REPO=%s\nSOURCE_TAG=%s\nBUILD_SEMVER=%s\nBUILD_NUMBER=%s\nRELEASE_TAG=%s\n" "$${harborImageRepo}" "$${ghcrImageRepo}" "$${legacyGhcrImageRepo}" "$${sourceTag}" "$${buildSemver}" "$${buildNumber}" "$${releaseTag}" > .drone/promote-production.env'
+      - 'mkdir -p .drone; if [ -z "$${HARBOR_USERNAME}" ] || [ -z "$${HARBOR_PASSWORD}" ]; then echo "Harbor secrets are missing (harbor_robot_username / harbor_robot_password)"; exit 1; fi; if [ -z "$${HARBOR_CA_CERT}" ]; then echo "Harbor CA secret is missing (harbor_ca_cert)"; exit 1; fi; mkdir -p /tmp/harbor-certs; printf "%b" "$${HARBOR_CA_CERT}" > /tmp/harbor-certs/harbor-ca.crt; harborImageRepo="harbor.internal.promethix.net/promethix/cloudflare-tunnel-operator"; ghcrImageRepo="ghcr.io/promethixlabs/cloudflare-tunnel-operator"; legacyGhcrImageRepo="ghcr.io/gentoorax/cloudflare-tunnel-operator"; sourceTag="$${SOURCE_IMAGE_TAG:-alpha-latest}"; configJson="$(skopeo inspect --config --creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --cert-dir /tmp/harbor-certs "docker://$${harborImageRepo}:$${sourceTag}")"; buildSemver="$(printf "%s" "$${configJson}" | grep -o "\"org.opencontainers.image.version\":[[:space:]]*\"[^\"]*\"" | head -n 1 | sed "s/^\"org.opencontainers.image.version\":[[:space:]]*\"//; s/\"$//")"; if [ -z "$${buildSemver}" ]; then echo "Unable to resolve image metadata from $${harborImageRepo}:$${sourceTag}"; echo "$${configJson}"; exit 1; fi; releaseTag="$${buildSemver}"; printf "HARBOR_IMAGE_REPO=%s\nGHCR_IMAGE_REPO=%s\nLEGACY_GHCR_IMAGE_REPO=%s\nSOURCE_TAG=%s\nBUILD_SEMVER=%s\nRELEASE_TAG=%s\n" "$${harborImageRepo}" "$${ghcrImageRepo}" "$${legacyGhcrImageRepo}" "$${sourceTag}" "$${buildSemver}" "$${releaseTag}" > .drone/promote-production.env'
 
   - name: announce-production-promotion
     image: alpine:3.21
@@ -363,7 +363,7 @@ steps:
     commands:
       - '. .drone/promote-production.env'
       - 'echo "Planned production promotion:"'
-      - 'echo "  source staging tag: $${SOURCE_TAG}"'
+      - 'echo "  source alpha tag: $${SOURCE_TAG}"'
       - 'echo "  latest"'
       - 'echo "  $${RELEASE_TAG}"'
 
