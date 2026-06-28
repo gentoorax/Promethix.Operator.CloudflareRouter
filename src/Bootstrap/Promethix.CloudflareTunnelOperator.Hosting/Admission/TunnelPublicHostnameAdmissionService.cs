@@ -1,14 +1,11 @@
 using System.Net;
 using System.Text.Json;
-using Microsoft.Extensions.Options;
-using Promethix.CloudflareTunnelOperator.Hosting.Options;
 using Promethix.CloudflareTunnelOperator.Routing.Integrations.Kubernetes;
 
 namespace Promethix.CloudflareTunnelOperator.Hosting.Admission;
 
 internal sealed class TunnelPublicHostnameAdmissionService(
-    KubernetesTunnelPublicHostnameClient client,
-    IOptions<KubernetesOperatorOptions> kubernetesOptions)
+    IManagedTunnelPublicHostnameValidator managedValidator)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -47,17 +44,28 @@ internal sealed class TunnelPublicHostnameAdmissionService(
             return CreateDeniedResponse(request.Uid, "TunnelPublicHostname payload could not be parsed.", HttpStatusCode.BadRequest);
         }
 
-        if (!client.IsManaged(resource))
+        if (!managedValidator.IsManaged(resource))
         {
             return CreateAllowedResponse(request.Uid);
         }
 
-        var (managedIntent, invalidIntent) = await client.TryBuildIntentAsync(resource, cancellationToken).ConfigureAwait(false);
-        return invalidIntent is not null
-            ? CreateDeniedResponse(request.Uid, invalidIntent.Reason, HttpStatusCode.UnprocessableEntity)
-            : kubernetesOptions.Value.EnforceNamespaceHostnamePolicy && managedIntent is null
-            ? CreateDeniedResponse(request.Uid, "Managed TunnelPublicHostname did not produce a valid route intent.", HttpStatusCode.UnprocessableEntity)
-            : CreateAllowedResponse(request.Uid);
+        try
+        {
+            await managedValidator.ValidateAsync(resource, cancellationToken).ConfigureAwait(false);
+            return CreateAllowedResponse(request.Uid);
+        }
+        catch (ArgumentException ex)
+        {
+            return CreateDeniedResponse(request.Uid, ex.Message, HttpStatusCode.UnprocessableEntity);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return CreateDeniedResponse(request.Uid, ex.Message, HttpStatusCode.UnprocessableEntity);
+        }
+        catch (UriFormatException ex)
+        {
+            return CreateDeniedResponse(request.Uid, ex.Message, HttpStatusCode.UnprocessableEntity);
+        }
     }
 
     private static AdmissionReview CreateAllowedResponse(string uid)

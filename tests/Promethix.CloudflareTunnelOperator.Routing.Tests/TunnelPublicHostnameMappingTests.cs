@@ -398,8 +398,10 @@ public sealed class TunnelPublicHostnameMappingTests
             {
                 OwnershipTag = "promethix-cloudflare-tunnel-operator",
             }),
-            hostnameOwnershipValidator ?? new AcceptingHostnameOwnershipValidator(),
-            new AcceptingIngressTargetValidator(),
+            new ManagedTunnelPublicHostnameValidator(
+                Options.Create(kubernetesOptions),
+                hostnameOwnershipValidator ?? new AcceptingHostnameOwnershipValidator(),
+                new AcceptingIngressTargetValidator()),
             NullLogger<KubernetesTunnelPublicHostnameClient>.Instance);
     }
 }

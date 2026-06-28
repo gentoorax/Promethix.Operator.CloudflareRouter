@@ -65,6 +65,7 @@ builder.Services.AddSingleton(_ => KubernetesClientFactory.Create());
 builder.Services.AddSingleton<IIngressTargetValidator, KubernetesIngressTargetValidator>();
 builder.Services.AddSingleton<IKubernetesNamespaceReader, KubernetesNamespaceReader>();
 builder.Services.AddSingleton<IHostnameOwnershipValidator, KubernetesHostnameOwnershipValidator>();
+builder.Services.AddSingleton<IManagedTunnelPublicHostnameValidator, ManagedTunnelPublicHostnameValidator>();
 builder.Services.AddSingleton<KubernetesTunnelPublicHostnameClient>();
 builder.Services.AddSingleton<TunnelPublicHostnameAdmissionService>();
 builder.Services.AddSingleton<IClusterRouteIntentSource, KubernetesRouteIntentSource>();

@@ -14,8 +14,7 @@ public sealed class KubernetesTunnelPublicHostnameClient(
     IKubernetes kubernetes,
     IOptions<KubernetesOperatorOptions> options,
     IOptions<RoutingOperatorOptions> routingOptions,
-    IHostnameOwnershipValidator hostnameOwnershipValidator,
-    IIngressTargetValidator ingressTargetValidator,
+    IManagedTunnelPublicHostnameValidator managedValidator,
     ILogger<KubernetesTunnelPublicHostnameClient> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -79,11 +78,7 @@ public sealed class KubernetesTunnelPublicHostnameClient(
 
     public bool IsManaged(TunnelPublicHostnameCustomResource resource)
     {
-        ArgumentNullException.ThrowIfNull(resource);
-
-        return resource.Spec.Enabled
-            && string.Equals(resource.Spec.ClassName, options.Value.ManagedClassName, StringComparison.Ordinal)
-            && string.Equals(resource.Spec.TunnelRef.Name, options.Value.ManagedTunnelName, StringComparison.Ordinal);
+        return managedValidator.IsManaged(resource);
     }
 
     public static bool IsDeleting(TunnelPublicHostnameCustomResource resource)
@@ -275,40 +270,26 @@ public sealed class KubernetesTunnelPublicHostnameClient(
         string ownershipTag,
         CancellationToken cancellationToken)
     {
-        await hostnameOwnershipValidator.ValidateAsync(resource, cancellationToken).ConfigureAwait(false);
+        await managedValidator.ValidateAsync(resource, cancellationToken).ConfigureAwait(false);
 
         var target = resource.Spec.Target;
 
         return target is null || string.IsNullOrWhiteSpace(target.Mode)
             ? ToLegacyDirectRoute(resource, ownershipTag)
             : string.Equals(target.Mode.Trim(), "ingress", StringComparison.OrdinalIgnoreCase)
-                ? await ToIngressRouteAsync(resource, target, ownershipTag, cancellationToken).ConfigureAwait(false)
+                ? ToIngressRoute(resource, target, ownershipTag)
                 : string.Equals(target.Mode.Trim(), "direct", StringComparison.OrdinalIgnoreCase)
-                    ? ToDirectRoute(resource, target, ownershipTag, options.Value.AllowCrossNamespaceDirectTargets)
+                    ? ToDirectRoute(resource, target, ownershipTag)
                     : throw new InvalidOperationException($"Unsupported target mode '{target.Mode}'.");
     }
 
-    private async Task<PublicHostnameRoute> ToIngressRouteAsync(
+    private PublicHostnameRoute ToIngressRoute(
         TunnelPublicHostnameCustomResource resource,
         TunnelTargetSpec target,
-        string ownershipTag,
-        CancellationToken cancellationToken)
+        string ownershipTag)
     {
         var ingress = target.Ingress
             ?? throw new InvalidOperationException("spec.target.ingress is required when spec.target.mode=ingress.");
-
-        if (string.IsNullOrWhiteSpace(ingress.ClassName))
-        {
-            throw new InvalidOperationException("spec.target.ingress.className is required when spec.target.mode=ingress.");
-        }
-
-        if (!string.Equals(ingress.ClassName, options.Value.ManagedIngressClassName, StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException(
-                $"Ingress target class '{ingress.ClassName}' does not match managed ingress class '{options.Value.ManagedIngressClassName}'.");
-        }
-
-        await ingressTargetValidator.ValidateAsync(resource, ingress, cancellationToken).ConfigureAwait(false);
 
         var targetUrl = ResolveIngressTargetUrl(ingress);
         var protocol = string.Equals(targetUrl.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
@@ -324,20 +305,13 @@ public sealed class KubernetesTunnelPublicHostnameClient(
     private static PublicHostnameRoute ToDirectRoute(
         TunnelPublicHostnameCustomResource resource,
         TunnelTargetSpec target,
-        string ownershipTag,
-        bool allowCrossNamespaceDirectTargets)
+        string ownershipTag)
     {
         var direct = target.Direct
             ?? throw new InvalidOperationException("spec.target.direct is required when spec.target.mode=direct.");
 
         if (direct.Service is not null)
         {
-            EnsureServiceTargetNamespaceAllowed(
-                resource,
-                direct.Service,
-                "spec.target.direct.service",
-                allowCrossNamespaceDirectTargets);
-
             var targetUrl = ResolveServiceTargetUrl(direct.Service, "spec.target.direct.service");
             var serviceProtocol = string.Equals(targetUrl.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
                 ? RouteProtocol.Https
@@ -370,28 +344,7 @@ public sealed class KubernetesTunnelPublicHostnameClient(
     {
         return ingress.Service is null
             ? options.Value.IngressTargetUrl
-            : options.Value.AllowIngressServiceOverride
-                ? ResolveServiceTargetUrl(ingress.Service, "spec.target.ingress.service")
-                : throw new InvalidOperationException("spec.target.ingress.service is not allowed by this operator. Use the configured ingress target or enable KubernetesOperator:AllowIngressServiceOverride.");
-    }
-
-    private static void EnsureServiceTargetNamespaceAllowed(
-        TunnelPublicHostnameCustomResource resource,
-        TunnelIngressServiceTargetSpec service,
-        string fieldPath,
-        bool allowCrossNamespace)
-    {
-        if (allowCrossNamespace)
-        {
-            return;
-        }
-
-        var resourceNamespace = resource.Metadata.NamespaceProperty ?? string.Empty;
-
-        if (!string.Equals(service.Namespace, resourceNamespace, StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException($"{fieldPath}.namespace must match the TunnelPublicHostname namespace unless cross-namespace direct targets are explicitly enabled.");
-        }
+            : ResolveServiceTargetUrl(ingress.Service, "spec.target.ingress.service");
     }
 
     private static Uri ResolveServiceTargetUrl(TunnelIngressServiceTargetSpec service, string fieldPath)

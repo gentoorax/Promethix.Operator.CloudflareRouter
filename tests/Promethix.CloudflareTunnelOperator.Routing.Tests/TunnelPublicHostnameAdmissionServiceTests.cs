@@ -1,10 +1,7 @@
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Options;
-using Microsoft.Extensions.Logging.Abstractions;
 using Promethix.CloudflareTunnelOperator.Hosting.Admission;
-using Promethix.CloudflareTunnelOperator.Hosting.Options;
-using Promethix.CloudflareTunnelOperator.Routing.Application;
 using Promethix.CloudflareTunnelOperator.Routing.Integrations.Kubernetes;
 
 namespace Promethix.CloudflareTunnelOperator.Routing.Tests;
@@ -68,8 +65,7 @@ public sealed class TunnelPublicHostnameAdmissionServiceTests
 
     private static TunnelPublicHostnameAdmissionService CreateService()
     {
-        var client = new KubernetesTunnelPublicHostnameClient(
-            kubernetes: null!,
+        var managedValidator = new ManagedTunnelPublicHostnameValidator(
             Options.Create(new KubernetesOperatorOptions
             {
                 ManagedClassName = "public",
@@ -79,27 +75,11 @@ public sealed class TunnelPublicHostnameAdmissionServiceTests
                 ManagedFinalizerName = "edge.promethix.net/tunnelpublichostname-protection",
                 OwnershipConfigMapNamespace = "edge-system",
                 OwnershipConfigMapName = "promethix-cloudflare-tunnel-operator-ownership",
-            }),
-            Options.Create(new RoutingOperatorOptions
-            {
-                OwnershipTag = "promethix-cloudflare-tunnel-operator",
             }),
             new AcceptingHostnameOwnershipValidator(),
-            new AcceptingIngressTargetValidator(),
-            NullLogger<KubernetesTunnelPublicHostnameClient>.Instance);
+            new AcceptingIngressTargetValidator());
 
-        return new TunnelPublicHostnameAdmissionService(
-            client,
-            Options.Create(new KubernetesOperatorOptions
-            {
-                ManagedClassName = "public",
-                ManagedTunnelName = "delta-public",
-                ManagedIngressClassName = "traefik-cloudflare-tunnel",
-                IngressTargetUrl = new Uri("https://traefik-cloudflare-tunnel.edge-system.svc.cluster.local"),
-                ManagedFinalizerName = "edge.promethix.net/tunnelpublichostname-protection",
-                OwnershipConfigMapNamespace = "edge-system",
-                OwnershipConfigMapName = "promethix-cloudflare-tunnel-operator-ownership",
-            }));
+        return new TunnelPublicHostnameAdmissionService(managedValidator);
     }
 
     private static AdmissionReview CreateReview(string operation, TunnelPublicHostnameCustomResource resource)
