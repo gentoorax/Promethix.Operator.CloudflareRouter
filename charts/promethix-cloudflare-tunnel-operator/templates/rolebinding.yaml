@@ -1,0 +1,13 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "promethix-cloudflare-tunnel-operator.name" . }}-ownership
+  namespace: {{ .Values.operator.ownershipConfigMapNamespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "promethix-cloudflare-tunnel-operator.name" . }}-ownership
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "promethix-cloudflare-tunnel-operator.serviceAccountName" . }}
+    namespace: {{ include "promethix-cloudflare-tunnel-operator.namespace" . }}

@@ -1,0 +1,14 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "promethix-cloudflare-tunnel-operator.name" . }}-ownership
+  namespace: {{ .Values.operator.ownershipConfigMapNamespace }}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames:
+      - {{ .Values.operator.ownershipConfigMapName | quote }}
+    verbs: ["get", "update", "patch"]

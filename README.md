@@ -27,6 +27,7 @@ Direct origin publication is also supported for cases where going through ingres
 
 For multi-tenant safety, direct service targets are restricted to the same namespace as the `TunnelPublicHostname` by default. Per-resource ingress service overrides are also disabled by default; ingress mode normally uses the operator's configured `ingressTargetUrl`.
 If you need stronger hostname tenancy boundaries, enable `operator.enforceNamespaceHostnamePolicy` and annotate namespaces with the hostname suffixes they are allowed to claim, for example `edge.promethix.net/allowed-hostname-suffixes: apps.example.com, internal.example.com`.
+For shared clusters, tenant users should usually get namespace-scoped RBAC for `TunnelPublicHostname` in their own namespace rather than broad cluster access.
 
 ## Project layout
 
@@ -51,6 +52,7 @@ Example manifests are in [examples](examples):
 
 - [ingress-backed-app.yaml](examples/ingress-backed-app.yaml)
 - [direct-origin-app.yaml](examples/direct-origin-app.yaml)
+- [tenant-rbac.yaml](examples/tenant-rbac.yaml)
 - [flux](examples/flux)
 
 The Flux example is intentionally generic and uses placeholder secrets. Replace values for your cluster, tunnel, and ingress controller.
