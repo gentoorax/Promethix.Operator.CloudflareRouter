@@ -24,11 +24,32 @@ spec:
             spec:
               type: object
               required: ["className", "hostname", "tunnelRef"]
+              x-kubernetes-validations:
+                - rule: "!self.hostname.startsWith('*.')"
+                  message: "Wildcard hostnames are not supported."
+                - rule: "has(self.target) != has(self.origin)"
+                  message: "Specify either spec.target or legacy spec.origin, but not both."
+                - rule: "!has(self.target) || has(self.target.mode)"
+                  message: "spec.target.mode is required when spec.target is supplied."
+                - rule: "!has(self.target) || self.target.mode != 'ingress' || has(self.target.ingress)"
+                  message: "spec.target.ingress is required when spec.target.mode is ingress."
+                - rule: "!has(self.target) || self.target.mode != 'direct' || has(self.target.direct)"
+                  message: "spec.target.direct is required when spec.target.mode is direct."
+                - rule: "!has(self.target) || self.target.mode != 'ingress' || !has(self.target.direct)"
+                  message: "spec.target.direct must not be supplied when spec.target.mode is ingress."
+                - rule: "!has(self.target) || self.target.mode != 'direct' || !has(self.target.ingress)"
+                  message: "spec.target.ingress must not be supplied when spec.target.mode is direct."
+                - rule: "!has(self.target) || self.target.mode != 'direct' || !has(self.target.direct) || has(self.target.direct.service) != has(self.target.direct.url)"
+                  message: "spec.target.direct must specify either service or url, but not both."
+                - rule: "!has(self.target) || self.target.mode != 'direct' || !has(self.target.direct) || has(self.target.direct.service) || has(self.target.direct.protocol)"
+                  message: "spec.target.direct.protocol is required when spec.target.direct.url is used."
               properties:
                 className:
                   type: string
+                  minLength: 1
                 hostname:
                   type: string
+                  minLength: 1
                 enabled:
                   type: boolean
                 tunnelRef:
@@ -37,6 +58,7 @@ spec:
                   properties:
                     name:
                       type: string
+                      minLength: 1
                 target:
                   type: object
                   properties:
@@ -49,14 +71,17 @@ spec:
                       properties:
                         className:
                           type: string
+                          minLength: 1
                         service:
                           type: object
                           required: ["name", "namespace", "port", "scheme"]
                           properties:
                             name:
                               type: string
+                              minLength: 1
                             namespace:
                               type: string
+                              minLength: 1
                             port:
                               type: integer
                               minimum: 1
@@ -77,8 +102,10 @@ spec:
                           properties:
                             name:
                               type: string
+                              minLength: 1
                             namespace:
                               type: string
+                              minLength: 1
                             port:
                               type: integer
                               minimum: 1

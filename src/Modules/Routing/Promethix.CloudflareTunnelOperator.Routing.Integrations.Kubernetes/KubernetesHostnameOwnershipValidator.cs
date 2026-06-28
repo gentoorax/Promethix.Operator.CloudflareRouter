@@ -37,24 +37,27 @@ public sealed class KubernetesHostnameOwnershipValidator(
         }
 
         var hostname = resource.Spec.Hostname.Trim();
-        var allowedSuffixes = rawValue
+        var configuredSuffixes = rawValue
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Select(NormalizeSuffix)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        if (allowedSuffixes.Length == 0)
+        if (configuredSuffixes.Length == 0)
         {
             throw new InvalidOperationException(
                 $"Namespace '{resourceNamespace}' annotation '{annotationName}' does not define any valid hostname suffixes.");
         }
 
-        var allowed = allowedSuffixes.Any(suffix => HostnameMatchesSuffix(hostname, suffix));
+        var normalizedAllowedSuffixes = configuredSuffixes
+            .Select(NormalizeSuffix)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var allowed = normalizedAllowedSuffixes.Any(suffix => HostnameMatchesSuffix(hostname, suffix));
         if (!allowed)
         {
             throw new InvalidOperationException(
-                $"Hostname '{hostname}' is not permitted for namespace '{resourceNamespace}'. Allowed suffixes: {string.Join(", ", allowedSuffixes)}.");
+                $"Hostname '{hostname}' is not permitted for namespace '{resourceNamespace}'. Allowed suffixes: {string.Join(", ", configuredSuffixes)}.");
         }
     }
 
