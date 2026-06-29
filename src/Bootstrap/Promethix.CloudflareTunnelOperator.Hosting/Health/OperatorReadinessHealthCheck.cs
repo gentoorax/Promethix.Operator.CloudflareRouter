@@ -53,8 +53,15 @@ internal sealed class OperatorReadinessHealthCheck(
             return false;
         }
 
+        if (webhookState.AreCertificateFilesPresent())
+        {
+            result = HealthCheckResult.Unhealthy(
+                webhookState.FailureReason ?? "Admission webhook TLS material is present but the HTTPS listener is not serving.");
+            return true;
+        }
+
         result = HealthCheckResult.Unhealthy(
-            webhookState.FailureReason ?? "Admission webhook is enabled but the TLS listener is not ready.");
+            webhookState.FailureReason ?? "Admission webhook TLS material is not available yet.");
         return true;
     }
 

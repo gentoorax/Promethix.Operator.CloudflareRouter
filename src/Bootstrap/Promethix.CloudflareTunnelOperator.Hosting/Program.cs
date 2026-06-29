@@ -29,6 +29,8 @@ var admissionWebhookOptions = builder.Configuration
 var webhookRuntimeState = new AdmissionWebhookRuntimeState
 {
     Enabled = admissionWebhookOptions.Enabled,
+    CertificatePath = admissionWebhookOptions.CertificatePath,
+    PrivateKeyPath = admissionWebhookOptions.PrivateKeyPath,
 };
 builder.Services.AddSingleton(webhookRuntimeState);
 
@@ -39,7 +41,6 @@ if (admissionWebhookOptions.Enabled)
         options.ListenAnyIP(admissionWebhookOptions.ManagementPort);
         if (TryLoadWebhookCertificate(admissionWebhookOptions, out var certificate, out var failureReason))
         {
-            webhookRuntimeState.CertificateFilesPresent = true;
             webhookRuntimeState.ListenerReady = true;
             options.ListenAnyIP(admissionWebhookOptions.Port, listenOptions =>
             {
@@ -48,7 +49,6 @@ if (admissionWebhookOptions.Enabled)
         }
         else
         {
-            webhookRuntimeState.CertificateFilesPresent = HasWebhookCertificateFiles(admissionWebhookOptions);
             webhookRuntimeState.ListenerReady = false;
             webhookRuntimeState.FailureReason = failureReason;
         }
@@ -167,9 +167,4 @@ static bool TryLoadWebhookCertificate(
         failureReason = $"Admission webhook TLS material could not be loaded: {ex.Message}";
         return false;
     }
-}
-
-static bool HasWebhookCertificateFiles(AdmissionWebhookOptions options)
-{
-    return File.Exists(options.CertificatePath) && File.Exists(options.PrivateKeyPath);
 }

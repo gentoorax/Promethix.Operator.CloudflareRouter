@@ -21,7 +21,7 @@ internal sealed class OperatorLivenessHealthCheck(
             return Task.FromResult(HealthCheckResult.Healthy("Webhook listener is ready."));
         }
 
-        if (!webhookState.CertificateFilesPresent)
+        if (!webhookState.AreCertificateFilesPresent())
         {
             return Task.FromResult(HealthCheckResult.Healthy("Waiting for webhook TLS material to be projected."));
         }
