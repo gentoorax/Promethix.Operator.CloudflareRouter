@@ -76,6 +76,18 @@ public sealed class KubernetesTunnelPublicHostnameClient(
             InvalidRoutes: invalidRoutes);
     }
 
+    public async Task<IReadOnlyCollection<TunnelPublicHostnameCustomResource>> GetCleanupCandidatesAsync(CancellationToken cancellationToken)
+    {
+        var list = await ListAsync(cancellationToken).ConfigureAwait(false);
+
+        return
+        [
+            .. list.Items.Where(resource =>
+                IsDeleting(resource)
+                || (!IsManaged(resource) && HasManagedFinalizer(resource))),
+        ];
+    }
+
     public bool IsManaged(TunnelPublicHostnameCustomResource resource)
     {
         return managedValidator.IsManaged(resource);

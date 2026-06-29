@@ -31,6 +31,12 @@ internal sealed class OperatorWorker(
             new EventId(2002, "ReconciliationTriggered"),
             "Starting reconciliation triggered by {TriggerReason}.");
 
+    private static readonly Action<ILogger, int, Exception?> LogPendingCleanupSweep =
+        LoggerMessage.Define<int>(
+            LogLevel.Information,
+            new EventId(2003, "PendingCleanupSweep"),
+            "Processing {CleanupCandidateCount} pending cleanup resources after full reconciliation.");
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         workQueue.EnqueueFullResync("startup");
@@ -85,8 +91,10 @@ internal sealed class OperatorWorker(
             startupSafeForMutation: !result.ApplyBlocked,
             result.ApplyBlockReason,
             result.ApplyBlockMessage);
+
         await EnsureManagedFinalizersAsync(result, cancellationToken).ConfigureAwait(false);
         await statusUpdater.UpdateAsync(result, failure: null, cancellationToken).ConfigureAwait(false);
+        await ProcessPendingCleanupAsync(cancellationToken).ConfigureAwait(false);
 
         LogReconciliationCompleted(
             logger,
@@ -157,6 +165,17 @@ internal sealed class OperatorWorker(
             await resourceClient.EnsureFinalizerAsync(
                 new TunnelPublicHostnameResourceKey(intent.Namespace, intent.Name),
                 cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task ProcessPendingCleanupAsync(CancellationToken cancellationToken)
+    {
+        var cleanupCandidates = await resourceClient.GetCleanupCandidatesAsync(cancellationToken).ConfigureAwait(false);
+        LogPendingCleanupSweep(logger, cleanupCandidates.Count, null);
+
+        foreach (var resource in cleanupCandidates)
+        {
+            await CleanupResourceAsync(resource, cancellationToken).ConfigureAwait(false);
         }
     }
 
