@@ -150,4 +150,36 @@ public sealed class RoutePlannerTests
         _ = plan.ToUpdate.Should().BeEmpty();
         _ = plan.Conflicts.Should().BeEmpty();
     }
+
+    [Fact]
+    public void BuildPlanShouldTolerateDuplicateActualHostnames()
+    {
+        var desired = new[]
+        {
+            PublicHostnameRoute.Create(
+                "app.example.com",
+                new Uri("https://new.default.svc.cluster.local:8443"),
+                RouteProtocol.Https,
+                OwnershipTag),
+        };
+
+        var actual = new[]
+        {
+            PublicHostnameRoute.Create(
+                "app.example.com",
+                new Uri("https://old.default.svc.cluster.local:8443"),
+                RouteProtocol.Https,
+                OwnershipTag),
+            PublicHostnameRoute.Create(
+                "app.example.com",
+                new Uri("https://old.default.svc.cluster.local:8443"),
+                RouteProtocol.Https,
+                OwnershipTag),
+        };
+
+        var plan = RoutePlanner.BuildPlan(desired, actual, OwnershipTag);
+
+        _ = plan.ToUpdate.Should().ContainSingle(route => route.Hostname == "app.example.com");
+        _ = plan.Conflicts.Should().BeEmpty();
+    }
 }

@@ -18,25 +18,27 @@ internal static class CloudflareRouteConfigurationBuilder
         var deleteHostnames = plan.ToDelete.Select(route => route.Hostname).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var updateRoutes = plan.ToUpdate.ToDictionary(route => route.Hostname, StringComparer.OrdinalIgnoreCase);
         var createRoutes = plan.ToCreate.ToDictionary(route => route.Hostname, StringComparer.OrdinalIgnoreCase);
+        var plannedManagedHostnames = plan.ToCreate
+            .Concat(plan.ToUpdate)
+            .Concat(plan.ToDelete)
+            .Select(route => route.Hostname)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var managedHostnames = ownershipByHostname
             .Where(pair => string.Equals(pair.Value, ownershipTag, StringComparison.Ordinal))
             .Select(pair => pair.Key)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var managedOrPlannedHostnames = new HashSet<string>(managedHostnames, StringComparer.OrdinalIgnoreCase);
+        managedOrPlannedHostnames.UnionWith(plannedManagedHostnames);
 
         var ingress = new List<TunnelIngressRule>();
         var fallbackRules = new List<TunnelIngressRule>();
+        var processedManagedHostnames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var existingRule in currentConfiguration.Ingress)
         {
             if (string.IsNullOrWhiteSpace(existingRule.Hostname))
             {
                 fallbackRules.Add(existingRule);
-                continue;
-            }
-
-            if (!managedHostnames.Contains(existingRule.Hostname))
-            {
-                ingress.Add(existingRule);
                 continue;
             }
 
@@ -47,12 +49,30 @@ internal static class CloudflareRouteConfigurationBuilder
 
             if (updateRoutes.TryGetValue(existingRule.Hostname, out var updateRoute))
             {
-                ingress.Add(ToIngressRule(updateRoute));
+                if (processedManagedHostnames.Add(existingRule.Hostname))
+                {
+                    ingress.Add(ToIngressRule(updateRoute));
+                }
+
                 _ = updateRoutes.Remove(existingRule.Hostname);
                 continue;
             }
 
-            ingress.Add(existingRule);
+            if (createRoutes.ContainsKey(existingRule.Hostname))
+            {
+                continue;
+            }
+
+            if (!managedOrPlannedHostnames.Contains(existingRule.Hostname))
+            {
+                ingress.Add(existingRule);
+                continue;
+            }
+
+            if (processedManagedHostnames.Add(existingRule.Hostname))
+            {
+                ingress.Add(existingRule);
+            }
         }
 
         foreach (var route in updateRoutes.Values)

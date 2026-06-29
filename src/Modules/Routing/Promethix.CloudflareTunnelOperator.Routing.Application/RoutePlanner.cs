@@ -13,8 +13,14 @@ public static class RoutePlanner
         ArgumentNullException.ThrowIfNull(actualRoutes);
         ArgumentException.ThrowIfNullOrWhiteSpace(ownershipTag);
 
-        var desiredByHostname = desiredRoutes.ToDictionary(route => route.Hostname, StringComparer.OrdinalIgnoreCase);
-        var actualByHostname = actualRoutes.ToDictionary(route => route.Hostname, StringComparer.OrdinalIgnoreCase);
+        var desiredByHostname = desiredRoutes
+            .GroupBy(route => route.Hostname, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        var normalizedActualRoutes = actualRoutes
+            .GroupBy(route => route.Hostname, StringComparer.OrdinalIgnoreCase)
+            .Select(group => SelectActualRoute(group, ownershipTag))
+            .ToArray();
+        var actualByHostname = normalizedActualRoutes.ToDictionary(route => route.Hostname, StringComparer.OrdinalIgnoreCase);
 
         var toCreate = new List<PublicHostnameRoute>();
         var toUpdate = new List<PublicHostnameRoute>();
@@ -45,7 +51,7 @@ public static class RoutePlanner
             }
         }
 
-        foreach (var actual in actualRoutes)
+        foreach (var actual in normalizedActualRoutes)
         {
             if (desiredByHostname.ContainsKey(actual.Hostname))
             {
@@ -70,8 +76,10 @@ public static class RoutePlanner
         ArgumentNullException.ThrowIfNull(actualRoutes);
         ArgumentException.ThrowIfNullOrWhiteSpace(ownershipTag);
 
-        var actual = actualRoutes.FirstOrDefault(
-            route => string.Equals(route.Hostname, desiredRoute.Hostname, StringComparison.OrdinalIgnoreCase));
+        var actual = actualRoutes
+            .Where(route => string.Equals(route.Hostname, desiredRoute.Hostname, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(route => string.Equals(route.OwnershipTag, ownershipTag, StringComparison.Ordinal))
+            .FirstOrDefault();
 
         return actual is null
             ? new RoutePlan([desiredRoute], [], [], [])
@@ -93,8 +101,10 @@ public static class RoutePlanner
         ArgumentNullException.ThrowIfNull(actualRoutes);
         ArgumentException.ThrowIfNullOrWhiteSpace(ownershipTag);
 
-        var actual = actualRoutes.FirstOrDefault(
-            route => string.Equals(route.Hostname, hostname, StringComparison.OrdinalIgnoreCase));
+        var actual = actualRoutes
+            .Where(route => string.Equals(route.Hostname, hostname, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(route => string.Equals(route.OwnershipTag, ownershipTag, StringComparison.Ordinal))
+            .FirstOrDefault();
 
         return actual is null || !string.Equals(actual.OwnershipTag, ownershipTag, StringComparison.Ordinal)
             ? new RoutePlan([], [], [], [])
@@ -107,5 +117,14 @@ public static class RoutePlanner
             && left.Protocol == right.Protocol
             && left.OriginService == right.OriginService
             && string.Equals(left.OriginServerName, right.OriginServerName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static PublicHostnameRoute SelectActualRoute(
+        IGrouping<string, PublicHostnameRoute> group,
+        string ownershipTag)
+    {
+        return group
+            .OrderByDescending(route => string.Equals(route.OwnershipTag, ownershipTag, StringComparison.Ordinal))
+            .First();
     }
 }
