@@ -6,7 +6,6 @@ name: ci
 
 trigger:
   event:
-    - push
     - pull_request
     - tag
     - custom
