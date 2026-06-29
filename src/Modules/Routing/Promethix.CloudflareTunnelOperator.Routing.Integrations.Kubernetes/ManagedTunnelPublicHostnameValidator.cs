@@ -86,7 +86,9 @@ public sealed class ManagedTunnelPublicHostnameValidator(
                 $"Ingress target class '{ingress.ClassName}' does not match managed ingress class '{options.Value.ManagedIngressClassName}'.");
         }
 
-        if (ingress.Service is not null && !options.Value.AllowIngressServiceOverride)
+        if (ingress.Service is not null
+            && !options.Value.AllowIngressServiceOverride
+            && !MatchesConfiguredIngressTarget(ingress.Service, options.Value.IngressTargetUrl))
         {
             throw new InvalidOperationException("spec.target.ingress.service is not allowed by this operator. Use the configured ingress target or enable KubernetesOperator:AllowIngressServiceOverride.");
         }
@@ -155,5 +157,20 @@ public sealed class ManagedTunnelPublicHostnameValidator(
 
         return string.Equals(normalizedHostname, normalizedSuffix, StringComparison.OrdinalIgnoreCase)
                || normalizedHostname.EndsWith($".{normalizedSuffix}", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool MatchesConfiguredIngressTarget(
+        TunnelIngressServiceTargetSpec service,
+        Uri configuredIngressTargetUrl)
+    {
+        var explicitTargetUrl = ServiceTargetUrlResolver.Resolve(service, "spec.target.ingress.service");
+
+        return Uri.Compare(
+                   explicitTargetUrl,
+                   configuredIngressTargetUrl,
+                   UriComponents.SchemeAndServer | UriComponents.Port,
+                   UriFormat.SafeUnescaped,
+                   StringComparison.OrdinalIgnoreCase)
+               == 0;
     }
 }

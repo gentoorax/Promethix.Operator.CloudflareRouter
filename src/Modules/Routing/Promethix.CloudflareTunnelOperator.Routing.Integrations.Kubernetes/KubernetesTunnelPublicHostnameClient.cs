@@ -356,30 +356,11 @@ public sealed class KubernetesTunnelPublicHostnameClient(
     {
         return ingress.Service is null
             ? options.Value.IngressTargetUrl
-            : ResolveServiceTargetUrl(ingress.Service, "spec.target.ingress.service");
+            : ServiceTargetUrlResolver.Resolve(ingress.Service, "spec.target.ingress.service");
     }
 
     private static Uri ResolveServiceTargetUrl(TunnelIngressServiceTargetSpec service, string fieldPath)
     {
-        if (string.IsNullOrWhiteSpace(service.Name))
-        {
-            throw new InvalidOperationException($"{fieldPath}.name is required when {fieldPath} is supplied.");
-        }
-
-        if (string.IsNullOrWhiteSpace(service.Namespace))
-        {
-            throw new InvalidOperationException($"{fieldPath}.namespace is required when {fieldPath} is supplied.");
-        }
-
-        if (service.Port <= 0)
-        {
-            throw new InvalidOperationException($"{fieldPath}.port must be greater than zero when {fieldPath} is supplied.");
-        }
-
-        var scheme = service.Scheme?.Trim();
-        return !string.Equals(scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
-            ? throw new InvalidOperationException($"{fieldPath}.scheme must be http or https when {fieldPath} is supplied.")
-            : new Uri($"{scheme}://{service.Name}.{service.Namespace}.svc.cluster.local:{service.Port}");
+        return ServiceTargetUrlResolver.Resolve(service, fieldPath);
     }
 }

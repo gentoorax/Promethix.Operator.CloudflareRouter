@@ -14,12 +14,12 @@ public sealed class RouteReconcilerTests
             "test",
             [
                 new ManagedRouteIntent(
-                    "app-promethix-net",
-                    "demo",
+                    "app-example-com",
+                    "tenant-a",
                     1,
                     PublicHostnameRoute.Create(
-                        "app.promethix.net",
-                        new Uri("https://app.demo.svc.cluster.local:8443"),
+                        "app.example.com",
+                        new Uri("https://app.tenant-a.svc.cluster.local:8443"),
                         RouteProtocol.Https,
                         "promethix-cloudflare-tunnel-operator")),
             ],

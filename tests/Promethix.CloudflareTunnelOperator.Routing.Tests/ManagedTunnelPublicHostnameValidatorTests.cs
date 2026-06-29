@@ -11,10 +11,10 @@ public sealed class ManagedTunnelPublicHostnameValidatorTests
     {
         var validator = CreateValidator(options =>
         {
-            options.AllowedHostnameSuffixes = "apps.example.com, delta.promethix.net";
+            options.AllowedHostnameSuffixes = "apps.example.com, internal.example.com";
         });
 
-        var resource = CreateIngressResource("whoami.delta.promethix.net");
+        var resource = CreateIngressResource("whoami.apps.example.com");
 
         var act = () => validator.ValidateAsync(resource, CancellationToken.None);
 
@@ -29,13 +29,13 @@ public sealed class ManagedTunnelPublicHostnameValidatorTests
             options.AllowedHostnameSuffixes = "apps.example.com";
         });
 
-        var resource = CreateIngressResource("whoami.delta.promethix.net");
+        var resource = CreateIngressResource("whoami.other.example.net");
 
         var act = () => validator.ValidateAsync(resource, CancellationToken.None);
 
         var exception = await act.Should().ThrowAsync<InvalidOperationException>();
         _ = exception.Which.Message.Should().Be(
-            "Hostname 'whoami.delta.promethix.net' is not permitted by operator policy. Allowed suffixes: apps.example.com.");
+            "Hostname 'whoami.other.example.net' is not permitted by operator policy. Allowed suffixes: apps.example.com.");
     }
 
     private static ManagedTunnelPublicHostnameValidator CreateValidator(Action<KubernetesOperatorOptions>? configure = null)
@@ -66,7 +66,7 @@ public sealed class ManagedTunnelPublicHostnameValidatorTests
             Metadata = new k8s.Models.V1ObjectMeta
             {
                 Name = "whoami-public",
-                NamespaceProperty = "demo",
+                NamespaceProperty = "tenant-a",
             },
             Spec = new TunnelPublicHostnameSpec
             {

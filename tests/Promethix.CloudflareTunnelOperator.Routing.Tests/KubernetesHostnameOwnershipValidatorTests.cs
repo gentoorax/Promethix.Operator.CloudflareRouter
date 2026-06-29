@@ -11,11 +11,11 @@ public sealed class KubernetesHostnameOwnershipValidatorTests
     public async Task ValidateAsyncAllowsHostnameWithinNamespaceSuffix()
     {
         var validator = CreateValidator(
-            "demo",
+            "tenant-a",
             "edge.promethix.net/allowed-hostname-suffixes",
-            "delta.promethix.net, apps.promethix.net");
+            "apps.example.com, internal.example.com");
 
-        var resource = CreateResource("demo", "whoami.delta.promethix.net");
+        var resource = CreateResource("tenant-a", "whoami.apps.example.com");
 
         var act = () => validator.ValidateAsync(resource, CancellationToken.None);
 
@@ -26,34 +26,34 @@ public sealed class KubernetesHostnameOwnershipValidatorTests
     public async Task ValidateAsyncRejectsHostnameOutsideNamespaceSuffixes()
     {
         var validator = CreateValidator(
-            "demo",
+            "tenant-a",
             "edge.promethix.net/allowed-hostname-suffixes",
-            "apps.promethix.net");
+            "apps.example.com");
 
-        var resource = CreateResource("demo", "whoami.delta.promethix.net");
+        var resource = CreateResource("tenant-a", "whoami.other.example.net");
 
         var act = () => validator.ValidateAsync(resource, CancellationToken.None);
 
         var exception = await act.Should().ThrowAsync<InvalidOperationException>();
         _ = exception.Which.Message.Should().Be(
-            "Hostname 'whoami.delta.promethix.net' is not permitted for namespace 'demo'. Allowed suffixes: apps.promethix.net.");
+            "Hostname 'whoami.other.example.net' is not permitted for namespace 'tenant-a'. Allowed suffixes: apps.example.com.");
     }
 
     [Fact]
     public async Task ValidateAsyncRejectsMissingNamespaceAnnotation()
     {
         var validator = CreateValidator(
-            "demo",
+            "tenant-a",
             "edge.promethix.net/allowed-hostname-suffixes",
             null);
 
-        var resource = CreateResource("demo", "whoami.delta.promethix.net");
+        var resource = CreateResource("tenant-a", "whoami.apps.example.com");
 
         var act = () => validator.ValidateAsync(resource, CancellationToken.None);
 
         var exception = await act.Should().ThrowAsync<InvalidOperationException>();
         _ = exception.Which.Message.Should().Be(
-            "Namespace 'demo' is not allowed to claim hostnames because annotation 'edge.promethix.net/allowed-hostname-suffixes' is missing or empty.");
+            "Namespace 'tenant-a' is not allowed to claim hostnames because annotation 'edge.promethix.net/allowed-hostname-suffixes' is missing or empty.");
     }
 
     [Fact]
@@ -66,7 +66,7 @@ public sealed class KubernetesHostnameOwnershipValidatorTests
                 EnforceNamespaceHostnamePolicy = false,
             }));
 
-        var resource = CreateResource("demo", "whoami.delta.promethix.net");
+        var resource = CreateResource("tenant-a", "whoami.apps.example.com");
 
         var act = () => validator.ValidateAsync(resource, CancellationToken.None);
 

@@ -18,7 +18,7 @@ public sealed class TunnelPublicHostnameMappingTests
             Spec = new TunnelPublicHostnameSpec
             {
                 ClassName = "public",
-                Hostname = "app.promethix.net",
+                Hostname = "app.example.com",
                 TunnelRef = new TunnelReferenceSpec { Name = "delta-public" },
                 Target = new TunnelTargetSpec
                 {
@@ -69,12 +69,12 @@ public sealed class TunnelPublicHostnameMappingTests
             Metadata = new k8s.Models.V1ObjectMeta
             {
                 Name = "whoami-public",
-                NamespaceProperty = "demo",
+                NamespaceProperty = "tenant-a",
             },
             Spec = new TunnelPublicHostnameSpec
             {
                 ClassName = "public",
-                Hostname = "whoami.delta.promethix.net",
+                Hostname = "whoami.apps.example.com",
                 TunnelRef = new TunnelReferenceSpec { Name = "delta-public" },
                 Target = new TunnelTargetSpec
                 {
@@ -99,7 +99,7 @@ public sealed class TunnelPublicHostnameMappingTests
         _ = invalidIntent.Should().BeNull();
         _ = managedIntent.Should().NotBeNull();
         _ = managedIntent.Route.OriginService.Should().Be(new Uri("https://traefik-cloudflare-tunnel.edge-system.svc.cluster.local:443"));
-        _ = managedIntent.Route.OriginServerName.Should().Be("whoami.delta.promethix.net");
+        _ = managedIntent.Route.OriginServerName.Should().Be("whoami.apps.example.com");
     }
 
     [Fact]
@@ -116,11 +116,28 @@ public sealed class TunnelPublicHostnameMappingTests
     }
 
     [Fact]
+    public async Task IngressServiceMatchingConfiguredTargetIsAllowedByDefault()
+    {
+        var client = CreateClient(options =>
+        {
+            options.IngressTargetUrl = new Uri("https://traefik-cloudflare-tunnel.edge-system.svc.cluster.local:443");
+        });
+
+        var resource = CreateIngressOverrideResource();
+        var (managedIntent, invalidIntent) = await client.TryBuildIntentAsync(resource, CancellationToken.None);
+
+        _ = invalidIntent.Should().BeNull();
+        _ = managedIntent.Should().NotBeNull();
+        Assert.NotNull(managedIntent);
+        _ = managedIntent.Route.OriginService.Should().Be(new Uri("https://traefik-cloudflare-tunnel.edge-system.svc.cluster.local:443"));
+    }
+
+    [Fact]
     public async Task HostnameClaimIsRejectedWhenNamespacePolicyDeniesIt()
     {
         var client = CreateClient(
             hostnameOwnershipValidator: new RejectingHostnameOwnershipValidator(
-                "Hostname 'whoami.delta.promethix.net' is not permitted for namespace 'demo'. Allowed suffixes: apps.promethix.net."));
+                "Hostname 'whoami.apps.example.com' is not permitted for namespace 'tenant-a'. Allowed suffixes: apps.example.com."));
 
         var resource = CreateIngressManagedResource();
 
@@ -128,7 +145,7 @@ public sealed class TunnelPublicHostnameMappingTests
 
         _ = managedIntent.Should().BeNull();
         _ = invalidIntent.Should().NotBeNull();
-        _ = invalidIntent.Reason.Should().Be("Hostname 'whoami.delta.promethix.net' is not permitted for namespace 'demo'. Allowed suffixes: apps.promethix.net.");
+        _ = invalidIntent.Reason.Should().Be("Hostname 'whoami.apps.example.com' is not permitted for namespace 'tenant-a'. Allowed suffixes: apps.example.com.");
     }
 
     [Fact]
@@ -140,12 +157,12 @@ public sealed class TunnelPublicHostnameMappingTests
             Metadata = new k8s.Models.V1ObjectMeta
             {
                 Name = "api-direct",
-                NamespaceProperty = "demo",
+                NamespaceProperty = "tenant-a",
             },
             Spec = new TunnelPublicHostnameSpec
             {
                 ClassName = "public",
-                Hostname = "api.delta.promethix.net",
+                Hostname = "api.apps.example.com",
                 TunnelRef = new TunnelReferenceSpec { Name = "delta-public" },
                 Target = new TunnelTargetSpec
                 {
@@ -155,7 +172,7 @@ public sealed class TunnelPublicHostnameMappingTests
                         Service = new TunnelIngressServiceTargetSpec
                         {
                             Name = "api",
-                            Namespace = "demo",
+                            Namespace = "tenant-a",
                             Port = 8443,
                             Scheme = "https",
                         },
@@ -169,7 +186,7 @@ public sealed class TunnelPublicHostnameMappingTests
         _ = invalidIntent.Should().BeNull();
         _ = managedIntent.Should().NotBeNull();
         Assert.NotNull(managedIntent);
-        _ = managedIntent.Route.OriginService.Should().Be(new Uri("https://api.demo.svc.cluster.local:8443"));
+        _ = managedIntent.Route.OriginService.Should().Be(new Uri("https://api.tenant-a.svc.cluster.local:8443"));
     }
 
     [Fact]
@@ -181,12 +198,12 @@ public sealed class TunnelPublicHostnameMappingTests
             Metadata = new k8s.Models.V1ObjectMeta
             {
                 Name = "api-direct",
-                NamespaceProperty = "demo",
+                NamespaceProperty = "tenant-a",
             },
             Spec = new TunnelPublicHostnameSpec
             {
                 ClassName = "public",
-                Hostname = "api.delta.promethix.net",
+                Hostname = "api.apps.example.com",
                 TunnelRef = new TunnelReferenceSpec { Name = "delta-public" },
                 Target = new TunnelTargetSpec
                 {
@@ -221,12 +238,12 @@ public sealed class TunnelPublicHostnameMappingTests
             Metadata = new k8s.Models.V1ObjectMeta
             {
                 Name = "api-direct",
-                NamespaceProperty = "demo",
+                NamespaceProperty = "tenant-a",
             },
             Spec = new TunnelPublicHostnameSpec
             {
                 ClassName = "public",
-                Hostname = "api.delta.promethix.net",
+                Hostname = "api.apps.example.com",
                 TunnelRef = new TunnelReferenceSpec { Name = "delta-public" },
                 Target = new TunnelTargetSpec
                 {
@@ -262,12 +279,12 @@ public sealed class TunnelPublicHostnameMappingTests
             Metadata = new k8s.Models.V1ObjectMeta
             {
                 Name = "api-direct",
-                NamespaceProperty = "demo",
+                NamespaceProperty = "tenant-a",
             },
             Spec = new TunnelPublicHostnameSpec
             {
                 ClassName = "public",
-                Hostname = "api.delta.promethix.net",
+                Hostname = "api.apps.example.com",
                 TunnelRef = new TunnelReferenceSpec { Name = "delta-public" },
                 Target = new TunnelTargetSpec
                 {
@@ -275,7 +292,7 @@ public sealed class TunnelPublicHostnameMappingTests
                     Direct = new TunnelDirectTargetSpec
                     {
                         Protocol = "https",
-                        Url = new Uri("https://api.demo.svc.cluster.local:8443"),
+                        Url = new Uri("https://api.tenant-a.svc.cluster.local:8443"),
                     },
                 },
             },
@@ -286,7 +303,7 @@ public sealed class TunnelPublicHostnameMappingTests
         _ = invalidIntent.Should().BeNull();
         _ = managedIntent.Should().NotBeNull();
         Assert.NotNull(managedIntent);
-        _ = managedIntent.Route.OriginService.Should().Be(new Uri("https://api.demo.svc.cluster.local:8443"));
+        _ = managedIntent.Route.OriginService.Should().Be(new Uri("https://api.tenant-a.svc.cluster.local:8443"));
     }
 
     private sealed class AcceptingIngressTargetValidator : IIngressTargetValidator
@@ -323,12 +340,12 @@ public sealed class TunnelPublicHostnameMappingTests
             Metadata = new k8s.Models.V1ObjectMeta
             {
                 Name = "whoami-public",
-                NamespaceProperty = "demo",
+                NamespaceProperty = "tenant-a",
             },
             Spec = new TunnelPublicHostnameSpec
             {
                 ClassName = "public",
-                Hostname = "whoami.delta.promethix.net",
+                Hostname = "whoami.apps.example.com",
                 TunnelRef = new TunnelReferenceSpec { Name = "delta-public" },
                 Target = new TunnelTargetSpec
                 {
@@ -356,12 +373,12 @@ public sealed class TunnelPublicHostnameMappingTests
             Metadata = new k8s.Models.V1ObjectMeta
             {
                 Name = "whoami-public",
-                NamespaceProperty = "demo",
+                NamespaceProperty = "tenant-a",
             },
             Spec = new TunnelPublicHostnameSpec
             {
                 ClassName = "public",
-                Hostname = "whoami.delta.promethix.net",
+                Hostname = "whoami.apps.example.com",
                 TunnelRef = new TunnelReferenceSpec { Name = "delta-public" },
                 Target = new TunnelTargetSpec
                 {
