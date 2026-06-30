@@ -284,6 +284,8 @@ internal sealed class OperatorWorker(
                 return;
             }
 
+            await statusUpdater.UpdateSecurityPolicyAsync(intent, result, failure: null, cancellationToken).ConfigureAwait(false);
+
             LogSecurityPolicyCompleted(
                 logger,
                 result.Policy.Hostname,
@@ -301,6 +303,7 @@ internal sealed class OperatorWorker(
         catch (Exception ex)
 #pragma warning restore CA1031
         {
+            await statusUpdater.UpdateSecurityPolicyAsync(intent, result: null, ex, cancellationToken).ConfigureAwait(false);
             LogSecurityPolicyFailed(logger, intent.Route.Hostname, ex);
         }
     }

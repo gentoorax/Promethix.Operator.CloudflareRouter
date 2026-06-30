@@ -122,6 +122,13 @@ The intended implementation boundary is:
 
 Security policy reconciliation requires a Cloudflare zone id in addition to the account and tunnel ids.
 
+Security reconciliation status is reported separately from route status using the `SecurityPolicyReady` condition:
+
+- `True / Reconciled`: managed security rules match the declared intent
+- `False / Planned`: changes were detected but `operator.applyChanges=false`
+- `False / ReconcileFailed`: Cloudflare security policy reconciliation failed
+- `True / NotRequested`: no security policy reconciliation was requested for the resource
+
 Full example:
 
 - [rate-limited-ingress-app.yaml](../examples/rate-limited-ingress-app.yaml)

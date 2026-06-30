@@ -8,6 +8,12 @@ public interface IRouteIntentStatusUpdater
 
     Task UpdateInvalidAsync(InvalidRouteIntent invalidIntent, CancellationToken cancellationToken);
 
+    Task UpdateSecurityPolicyAsync(
+        ManagedRouteIntent intent,
+        SecurityPolicyReconciliationResult? result,
+        Exception? failure,
+        CancellationToken cancellationToken);
+
     Task UpdateCleanupPendingAsync(
         string resourceNamespace,
         string name,
