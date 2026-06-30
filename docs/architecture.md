@@ -1,6 +1,6 @@
 # Architecture
 
-This document covers the parts of the design that matter to operator users and contributors.
+This document covers the project architecture and coding patterns used by the operator.
 
 ## Purpose
 
@@ -30,63 +30,9 @@ In practice, that means:
 - the operator only deletes what it owns
 - new features should preserve clear boundaries between Kubernetes routing and Cloudflare publication
 
-## Resource model
-
-The operator watches a custom resource:
-
-- `TunnelPublicHostname`
-
-This resource is the source of truth for tunnel publication intent.
-
-It currently supports two target modes:
-
-- `ingress`
-  - preferred for normal web workloads
-  - points Cloudflare Tunnel at a Traefik-backed ingress path
-- `direct`
-  - for workloads that should not traverse ingress
-  - currently limited to HTTP and HTTPS origins
-
-## Recommended usage
-
-For most services:
-
-1. Expose the workload with normal Kubernetes `Ingress`
-2. Let Traefik handle routing, middleware, and TLS
-3. Use `TunnelPublicHostname` to publish the hostname through Cloudflare Tunnel
-
-This keeps responsibilities clear:
-
-- Kubernetes `Ingress`: internal routing contract
-- Traefik: middleware, auth, TLS, backend routing
-- Cloudflare Tunnel Operator: public hostname publication
-
-## Ingress-backed mode
-
-Ingress-backed mode is the default operating model.
-
-The operator validates:
-
-- the managed class and tunnel name
-- the ingress class declared in the CRD
-- the existence of a matching Kubernetes `Ingress` for the hostname and ingress class
-
-Ingress-backed targets use the shared default target from operator configuration. Per-resource ingress service override is disabled by default and should only be enabled for trusted, single-tenant deployments.
-
-If the configured ingress target uses HTTPS, the operator emits Cloudflare `originRequest.originServerName` using the public hostname from `TunnelPublicHostname.spec.hostname`.
-This allows cloudflared to verify the Traefik certificate against the public host name rather than the Kubernetes service DNS name used for the internal origin connection.
-
-## Direct mode
-
-Direct mode is intended for cases where routing through ingress is not appropriate.
-
-Today that means direct HTTP or HTTPS service targets. It exists to preserve flexibility for workloads that do not fit the normal ingress path.
-
-Future non-HTTP support should build on this mode rather than overloading ingress mode.
-
 ## Ownership and safety
 
-The operator is designed for shared-tunnel scenarios.
+The operator is designed for shared-tunnel scenarios. Ownership is part of the architecture, not an afterthought.
 
 - only routes owned by this operator are eligible for deletion
 - conflicting unmanaged hostnames are surfaced as conflicts, not overwritten

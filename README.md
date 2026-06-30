@@ -55,6 +55,7 @@ Example manifests are in [examples](examples):
 - [direct-origin-app.yaml](examples/direct-origin-app.yaml)
 - [tenant-rbac.yaml](examples/tenant-rbac.yaml)
 - [flux](examples/flux)
+- [rate-limited-ingress-app.yaml](examples/rate-limited-ingress-app.yaml)
 
 The examples are intentionally generic and use placeholder values. Replace hostnames, tunnel names, secrets, and ingress details for your cluster.
 
@@ -120,6 +121,8 @@ If you use Flux instead of manual Helm, start with:
 
 - [examples/flux/README.md](examples/flux/README.md)
 - [examples/flux/helmrelease.yaml](examples/flux/helmrelease.yaml)
+
+CRD usage notes are in [docs/crds.md](docs/crds.md).
 
 ## Manual Helm Deployment
 
@@ -256,7 +259,7 @@ Health endpoints:
 
 This project is still under active development. The core reconciliation and Kubernetes integration are in place, but the operator is not yet feature-complete.
 
-Design notes are in [docs/architecture.md](docs/architecture.md).
+Architecture notes are in [docs/architecture.md](docs/architecture.md).
 
 ## License
 
