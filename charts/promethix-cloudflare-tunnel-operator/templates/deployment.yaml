@@ -83,6 +83,8 @@ spec:
               value: {{ .Values.operator.maxDeletePercentage | quote }}
             - name: RoutingOperator__SecurityPoliciesEnabled
               value: {{ .Values.operator.securityPolicies.enabled | quote }}
+            - name: RoutingOperator__AllowEnterpriseOnlyRateLimitActions
+              value: {{ .Values.operator.allowEnterpriseOnlyRateLimitActions | quote }}
             - name: RoutingOperator__ReconciliationIntervalSeconds
               value: {{ .Values.operator.reconciliationIntervalSeconds | quote }}
             - name: AdmissionWebhook__Enabled

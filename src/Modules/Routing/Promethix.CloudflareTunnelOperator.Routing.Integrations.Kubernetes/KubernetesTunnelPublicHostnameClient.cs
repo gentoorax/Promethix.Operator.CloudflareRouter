@@ -283,7 +283,11 @@ public sealed class KubernetesTunnelPublicHostnameClient(
             resource.Metadata.NamespaceProperty ?? string.Empty,
             resource.Metadata.Generation,
             await ToRouteAsync(resource, ownershipTag, cancellationToken).ConfigureAwait(false),
-            ToSecurityPolicy(resource, ownershipTag, routingOptions.Value.SecurityPoliciesEnabled));
+            ToSecurityPolicy(
+                resource,
+                ownershipTag,
+                routingOptions.Value.SecurityPoliciesEnabled,
+                routingOptions.Value.AllowEnterpriseOnlyRateLimitActions));
     }
 
     private async Task<PublicHostnameRoute> ToRouteAsync(
@@ -364,7 +368,8 @@ public sealed class KubernetesTunnelPublicHostnameClient(
     private static HostnameSecurityPolicy? ToSecurityPolicy(
         TunnelPublicHostnameCustomResource resource,
         string ownershipTag,
-        bool securityPoliciesEnabled)
+        bool securityPoliciesEnabled,
+        bool allowEnterpriseOnlyRateLimitActions)
     {
         if (!securityPoliciesEnabled)
         {
@@ -383,12 +388,17 @@ public sealed class KubernetesTunnelPublicHostnameClient(
             throw new InvalidOperationException("spec.cloudflare.security.rateLimit.rules must contain at least one rule when rate limiting is enabled.");
         }
 
-        var rules = rateLimit.Rules.Select(rule => ToRateLimitRule(resource.Spec.Hostname, rule)).ToArray();
+        var rules = rateLimit.Rules
+            .Select(rule => ToRateLimitRule(resource.Spec.Hostname, rule, allowEnterpriseOnlyRateLimitActions))
+            .ToArray();
 
         return new HostnameSecurityPolicy(resource.Spec.Hostname, ownershipTag, rules);
     }
 
-    private static HostnameRateLimitRule ToRateLimitRule(string hostname, CloudflareRateLimitRuleSpec rule)
+    private static HostnameRateLimitRule ToRateLimitRule(
+        string hostname,
+        CloudflareRateLimitRuleSpec rule,
+        bool allowEnterpriseOnlyRateLimitActions)
     {
         if (string.IsNullOrWhiteSpace(rule.Name))
         {
@@ -406,9 +416,12 @@ public sealed class KubernetesTunnelPublicHostnameClient(
         }
 
         var action = rule.Action.Trim();
-        if (!IsSupportedRateLimitAction(action))
+        if (!IsSupportedRateLimitAction(action, allowEnterpriseOnlyRateLimitActions))
         {
-            throw new InvalidOperationException("spec.cloudflare.security.rateLimit.rules[].action must be one of block, challenge, managed_challenge, or log.");
+            throw new InvalidOperationException(
+                allowEnterpriseOnlyRateLimitActions
+                    ? "spec.cloudflare.security.rateLimit.rules[].action must be one of block, challenge, managed_challenge, or log."
+                    : "spec.cloudflare.security.rateLimit.rules[].action must be one of block, challenge, or managed_challenge. The log action is Enterprise-only and must be explicitly enabled by the operator administrator.");
         }
 
         var expression = ResolveRateLimitExpression(hostname, rule);
@@ -439,12 +452,12 @@ public sealed class KubernetesTunnelPublicHostnameClient(
         return $"(http.host eq \"{escapedHostname}\" and starts_with(http.request.uri.path, \"{escapedPathPrefix}\"))";
     }
 
-    private static bool IsSupportedRateLimitAction(string action)
+    private static bool IsSupportedRateLimitAction(string action, bool allowEnterpriseOnlyRateLimitActions)
     {
         return string.Equals(action, "block", StringComparison.Ordinal)
             || string.Equals(action, "challenge", StringComparison.Ordinal)
             || string.Equals(action, "managed_challenge", StringComparison.Ordinal)
-            || string.Equals(action, "log", StringComparison.Ordinal);
+            || (allowEnterpriseOnlyRateLimitActions && string.Equals(action, "log", StringComparison.Ordinal));
     }
 
     private Uri ResolveIngressTargetUrl(TunnelIngressTargetSpec ingress)

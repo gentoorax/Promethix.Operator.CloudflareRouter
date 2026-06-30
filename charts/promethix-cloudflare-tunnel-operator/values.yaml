@@ -44,6 +44,7 @@ operator:
   reconciliationIntervalSeconds: 30
   securityPolicies:
     enabled: false
+  allowEnterpriseOnlyRateLimitActions: false
 
 webhook:
   enabled: false

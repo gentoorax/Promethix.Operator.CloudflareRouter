@@ -219,6 +219,7 @@ For shared clusters, the recommended ingress posture is:
 That preserves compatibility with explicit shared-ingress declarations while denying arbitrary ingress service overrides.
 
 Per-hostname Cloudflare rate-limit reconciliation is also disabled by default. To enable it, set `operator.securityPolicies.enabled=true`. This is an advanced feature and requires additional Cloudflare zone/ruleset permissions beyond the basic tunnel-only token used for route reconciliation.
+The `log` rate-limit action is treated as Enterprise-only and is rejected by default; enable `operator.allowEnterpriseOnlyRateLimitActions=true` only if your Cloudflare zone supports it.
 
 To install from a local checkout instead, replace the chart reference with `./charts/promethix-cloudflare-tunnel-operator`.
 

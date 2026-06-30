@@ -472,6 +472,39 @@ public sealed class TunnelPublicHostnameMappingTests
         _ = invalidIntent.Reason.Should().Be("spec.cloudflare.security.rateLimit.rules must contain at least one rule when rate limiting is enabled.");
     }
 
+    [Fact]
+    public async Task EnterpriseOnlyLogRateLimitActionIsRejectedByDefault()
+    {
+        var client = CreateClient(securityPoliciesEnabled: true);
+        var resource = CreateRateLimitedResource("log");
+
+        var (managedIntent, invalidIntent) = await client.TryBuildIntentAsync(resource, CancellationToken.None);
+
+        _ = managedIntent.Should().BeNull();
+        _ = invalidIntent.Should().NotBeNull();
+        Assert.NotNull(invalidIntent);
+        _ = invalidIntent.Reason.Should().Be(
+            "spec.cloudflare.security.rateLimit.rules[].action must be one of block, challenge, or managed_challenge. The log action is Enterprise-only and must be explicitly enabled by the operator administrator.");
+    }
+
+    [Fact]
+    public async Task EnterpriseOnlyLogRateLimitActionCanBeEnabledExplicitly()
+    {
+        var client = CreateClient(
+            securityPoliciesEnabled: true,
+            configureRouting: options => options.AllowEnterpriseOnlyRateLimitActions = true);
+        var resource = CreateRateLimitedResource("log");
+
+        var (managedIntent, invalidIntent) = await client.TryBuildIntentAsync(resource, CancellationToken.None);
+
+        _ = invalidIntent.Should().BeNull();
+        _ = managedIntent.Should().NotBeNull();
+        Assert.NotNull(managedIntent);
+        Assert.NotNull(managedIntent.SecurityPolicy);
+        _ = managedIntent.SecurityPolicy.RateLimitRules.Should().ContainSingle();
+        _ = managedIntent.SecurityPolicy.RateLimitRules.Single().Action.Should().Be("log");
+    }
+
     private sealed class AcceptingIngressTargetValidator : IIngressTargetValidator
     {
         public Task ValidateAsync(
@@ -558,9 +591,63 @@ public sealed class TunnelPublicHostnameMappingTests
         };
     }
 
+    private static TunnelPublicHostnameCustomResource CreateRateLimitedResource(string action)
+    {
+        return new TunnelPublicHostnameCustomResource
+        {
+            Metadata = new k8s.Models.V1ObjectMeta
+            {
+                Name = "api-public",
+                NamespaceProperty = "demo",
+            },
+            Spec = new TunnelPublicHostnameSpec
+            {
+                ClassName = "public",
+                Hostname = "api.delta.promethix.net",
+                TunnelRef = new TunnelReferenceSpec { Name = "delta-public" },
+                Target = new TunnelTargetSpec
+                {
+                    Mode = "direct",
+                    Direct = new TunnelDirectTargetSpec
+                    {
+                        Service = new TunnelIngressServiceTargetSpec
+                        {
+                            Name = "api",
+                            Namespace = "demo",
+                            Port = 8080,
+                            Scheme = "http",
+                        },
+                    },
+                },
+                Cloudflare = new CloudflareRouteSpec
+                {
+                    Security = new CloudflareSecuritySpec
+                    {
+                        RateLimit = new CloudflareRateLimitSpec
+                        {
+                            Enabled = true,
+                            Rules =
+                            [
+                                new CloudflareRateLimitRuleSpec
+                                {
+                                    Name = "api-v1",
+                                    PathPrefix = "/v1/",
+                                    RequestsPerPeriod = 60,
+                                    PeriodSeconds = 60,
+                                    Action = action,
+                                },
+                            ],
+                        },
+                    },
+                },
+            },
+        };
+    }
+
     private static KubernetesTunnelPublicHostnameClient CreateClient(
         Action<KubernetesOperatorOptions>? configure = null,
         bool securityPoliciesEnabled = false,
+        Action<RoutingOperatorOptions>? configureRouting = null,
         IHostnameOwnershipValidator? hostnameOwnershipValidator = null)
     {
         var kubernetesOptions = new KubernetesOperatorOptions
@@ -575,14 +662,17 @@ public sealed class TunnelPublicHostnameMappingTests
         };
         configure?.Invoke(kubernetesOptions);
 
+        var routingOperatorOptions = new RoutingOperatorOptions
+        {
+            OwnershipTag = "promethix-cloudflare-tunnel-operator",
+            SecurityPoliciesEnabled = securityPoliciesEnabled,
+        };
+        configureRouting?.Invoke(routingOperatorOptions);
+
         return new KubernetesTunnelPublicHostnameClient(
             kubernetes: null!,
             Options.Create(kubernetesOptions),
-            Options.Create(new RoutingOperatorOptions
-            {
-                OwnershipTag = "promethix-cloudflare-tunnel-operator",
-                SecurityPoliciesEnabled = securityPoliciesEnabled,
-            }),
+            Options.Create(routingOperatorOptions),
             new ManagedTunnelPublicHostnameValidator(
                 Options.Create(kubernetesOptions),
                 hostnameOwnershipValidator ?? new AcceptingHostnameOwnershipValidator(),
