@@ -167,7 +167,7 @@ public sealed class CloudflareTunnelRouteClient(
     {
         var currentHostnames = configuration.Ingress
             .Where(rule => !string.IsNullOrWhiteSpace(rule.Hostname))
-            .Select(rule => rule.Hostname!)
+            .Select(rule => rule.Hostname)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var prunedOwnership = new Dictionary<string, string>(ownershipByHostname, StringComparer.OrdinalIgnoreCase);
