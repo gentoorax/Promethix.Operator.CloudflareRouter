@@ -33,6 +33,12 @@ public sealed class CloudflareTunnelRouteClient(
             new EventId(1002, "CloudflareWriteRejected"),
             "Cloudflare rejected tunnel configuration update with status {StatusCode}. Response body: {ResponseBody}");
 
+    private static readonly Action<ILogger, int, Exception?> LogPruningOwnershipEntries =
+        LoggerMessage.Define<int>(
+            LogLevel.Information,
+            new EventId(1003, "PruningOwnershipEntries"),
+            "Pruning {EntryCount} stale Cloudflare ownership entries that no longer exist in tunnel configuration.");
+
     public async Task<IReadOnlyCollection<PublicHostnameRoute>> GetRoutesAsync(CancellationToken cancellationToken)
     {
         LogReadingRoutes(logger, options.Value.TunnelId, options.Value.AccountId, null);
@@ -43,6 +49,7 @@ public sealed class CloudflareTunnelRouteClient(
             cancellationToken).ConfigureAwait(false);
 
         var ownershipByHostname = await ownershipStore.GetOwnershipAsync(cancellationToken).ConfigureAwait(false);
+        ownershipByHostname = await PruneStaleOwnershipAsync(configuration, ownershipByHostname, cancellationToken).ConfigureAwait(false);
 
         return [.. configuration.Ingress
             .Where(rule => !string.IsNullOrWhiteSpace(rule.Hostname))
@@ -151,5 +158,39 @@ public sealed class CloudflareTunnelRouteClient(
         var responseBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         LogCloudflareWriteRejected(logger, (int)response.StatusCode, responseBody, null);
         _ = response.EnsureSuccessStatusCode();
+    }
+
+    private async Task<IReadOnlyDictionary<string, string>> PruneStaleOwnershipAsync(
+        TunnelConfiguration configuration,
+        IReadOnlyDictionary<string, string> ownershipByHostname,
+        CancellationToken cancellationToken)
+    {
+        var currentHostnames = configuration.Ingress
+            .Where(rule => !string.IsNullOrWhiteSpace(rule.Hostname))
+            .Select(rule => rule.Hostname!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var prunedOwnership = new Dictionary<string, string>(ownershipByHostname, StringComparer.OrdinalIgnoreCase);
+        var removedCount = 0;
+
+        foreach (var hostname in ownershipByHostname.Keys)
+        {
+            if (currentHostnames.Contains(hostname))
+            {
+                continue;
+            }
+
+            _ = prunedOwnership.Remove(hostname);
+            removedCount++;
+        }
+
+        if (removedCount == 0)
+        {
+            return ownershipByHostname;
+        }
+
+        LogPruningOwnershipEntries(logger, removedCount, null);
+        await ownershipStore.SaveOwnershipAsync(prunedOwnership, cancellationToken).ConfigureAwait(false);
+        return prunedOwnership;
     }
 }
