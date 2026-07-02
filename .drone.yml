@@ -43,6 +43,11 @@ steps:
       DOTNET_NOLOGO: "1"
       NUGET_PACKAGES: /drone/src/.nuget/packages
     commands:
+      - apt-get update
+      - apt-get install -y curl tar gzip
+      - curl -fsSL -o /tmp/helm.tar.gz https://get.helm.sh/helm-v3.18.4-linux-amd64.tar.gz
+      - tar -xzf /tmp/helm.tar.gz -C /tmp
+      - install /tmp/linux-amd64/helm /usr/local/bin/helm
       - dotnet test Promethix.CloudflareTunnelOperator.slnx --configuration Release --no-build --logger "trx;LogFileName=tests.trx"
 
 ---
@@ -105,6 +110,11 @@ steps:
       DOTNET_NOLOGO: "1"
       NUGET_PACKAGES: /drone/src/.nuget/packages
     commands:
+      - apt-get update
+      - apt-get install -y curl tar gzip
+      - curl -fsSL -o /tmp/helm.tar.gz https://get.helm.sh/helm-v3.18.4-linux-amd64.tar.gz
+      - tar -xzf /tmp/helm.tar.gz -C /tmp
+      - install /tmp/linux-amd64/helm /usr/local/bin/helm
       - dotnet test Promethix.CloudflareTunnelOperator.slnx --configuration Release --no-build --logger "trx;LogFileName=tests.trx"
 
   - name: calculate-build-metadata
