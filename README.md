@@ -147,9 +147,10 @@ kubectl create secret generic cloudflare-tunnel-operator `
   --namespace cloudflare-tunnel-operator-system `
   --from-literal=CLOUDFLARE_API_TOKEN=replace-me `
   --from-literal=CLOUDFLARE_ACCOUNT_ID=replace-me `
-  --from-literal=CLOUDFLARE_TUNNEL_ID=replace-me `
-  --from-literal=CLOUDFLARE_ZONE_ID=replace-me
+  --from-literal=CLOUDFLARE_TUNNEL_ID=replace-me
 ```
+
+Add `CLOUDFLARE_ZONE_ID` only when you enable `operator.securityPolicies.enabled=true` and you are using the legacy single-zone fallback. For multi-zone setups, prefer `cloudflare.zoneMappings` in Helm values instead.
 
 Annotate each tenant namespace with the hostname suffixes it is allowed to claim:
 
